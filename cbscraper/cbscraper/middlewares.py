@@ -53,7 +53,7 @@ class CbscraperSpiderMiddleware:
             yield r
 
     def spider_opened(self, spider):
-        spider.logger.info('Spider opened: %s' % spider.name)
+        spider.logger.info("Spider opened: %s" % spider.name)
 
 
 class CbscraperDownloaderMiddleware:
@@ -100,4 +100,4 @@ class CbscraperDownloaderMiddleware:
         pass
 
     def spider_opened(self, spider):
-        spider.logger.info('Spider opened: %s' % spider.name)
+        spider.logger.info("Spider opened: %s" % spider.name)

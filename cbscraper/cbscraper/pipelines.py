@@ -11,8 +11,10 @@ from scrapy.exceptions import DropItem
 
 class CbscraperPipeline:
     unique = set()
+
     def process_item(self, item, spider):
-        if item["url"] not in self.unique:
-            self.unique.add(item["url"])
-            return item
-        raise DropItem
+        if not item["ingredients"] or item["url"] in self.unique or "kit" in item["name"].lower():
+            raise DropItem
+        item["ingredients"] = list(map(str.strip, item["ingredients"].split(", ")))
+        self.unique.add(item["url"])
+        return item
