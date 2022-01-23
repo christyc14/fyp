@@ -5,7 +5,7 @@ import re
 from scrapy import Request, Spider
 
 BASE_URL = "https://www.cultbeauty.com"
-NUM_PAGES = 2
+NUM_PAGES = 100
 EMPTY_DESCRIPTION = "\n\n                              "
 
 
@@ -37,7 +37,7 @@ class ProductbotSpider(Spider):
     def parse(self, response):
         i = 1
         product_url = self.get_product(response, i)
-        while product_url and i < 2:
+        while product_url:
             yield Request(
                 url=BASE_URL + product_url,
                 callback=self.parse_ingredients,
