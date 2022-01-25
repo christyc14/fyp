@@ -58,5 +58,6 @@ BLACKLIST_NAMES = [
     "La Mer",
     "Chantecaille Flower Infused Cleansing Milk",
     "Furtuna Skin X Jeremy Scott Collector's Edition",
-    "Dr. Barbara Sturm Brightening Face Cream"
+    "Dr. Barbara Sturm Brightening Face Cream",
+    "Aurelia London 3 Step Starter Collection"
 ]
