@@ -40,7 +40,7 @@ def recommender(opt):
             if item['ingredients'][i] not in ingred_index:
                 ingred_index[index] = item['ingredients'][i]
             index +=1
-    # print(ingred_index)
+    print(ingred_index)
 # mapping encodings to items
     X = len(df)
     Y = len(ingred_index)
@@ -63,7 +63,7 @@ def recommender(opt):
         big_matrix[i, :] = encoder(ingreds)
         i += 1
 
-
+#tsne to reduce dimensionality
 
 #can add the multiple products later
 
