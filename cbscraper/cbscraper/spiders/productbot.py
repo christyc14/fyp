@@ -4,26 +4,25 @@ import json
 import re
 from scrapy import Request, Spider
 
-BASE_URL = "https://www.cultbeauty.com"
-NUM_PAGES = 100
+BASE_URL = "https://www.sephora.com"
+NUM_PAGES = 2
 EMPTY_DESCRIPTION = "\n\n                              "
 
 
 class Category(Enum):
-    CLEANSER = "cleansers-toners.list"
-    TONER = "toners-mists/toner.list"
-    MOISTURISER = "moisturisers.list"
-    SERUM = "serums.list"
-    MASKS = "masks-exfoliators/masks.list"
-    EXFOLIATORS = "masks-exfoliators/exfoliators.list"
-    SPF = "moisturisers/spfs.list"
+    CLEANSER = "face-wash-facial-cleanser"
+    TONER = "facial-toner-skin-toner"
+    MOISTURISER = "moisturizer-skincare"
+    SERUM = "face-serum"
+    MASKS = "exfoliating-scrub-exfoliator"
+    # SPF = "moisturisers/spfs.list"
 
     def gen_cb_url(self, i: int) -> str:
-        return f"{BASE_URL}/skin-care/{self.value}?pageNumber={i}"
+        return f"{BASE_URL}/shop/{self.value}?currentPage={i}"
 
 
 def get_category_from_url(url: str) -> Category:
-    return Category(url.split("/", 4)[-1].split("?")[0])
+    return Category(url.split("/")[-1].split("?")[0])
 
 
 class ProductbotSpider(Spider):
@@ -39,7 +38,7 @@ class ProductbotSpider(Spider):
         product_url = self.get_product(response, i)
         while product_url:
             yield Request(
-                url=BASE_URL + product_url,
+                url=product_url,
                 callback=self.parse_ingredients,
                 cb_kwargs=dict(category=get_category_from_url(response.url)),
             )
@@ -48,20 +47,22 @@ class ProductbotSpider(Spider):
 
     def parse_ingredients(self, response, category: Category):
         ingredients = response.xpath(
-            '//div[@id="product-description-content-7"]//p/text()'
+            '//div[@id="ingredients"]/div/div/text()'
         ).get()
-        if ingredients == EMPTY_DESCRIPTION:
-            ingredients = response.xpath(
-                '//div[@id="product-description-content-7"]//div/text()'
-            ).get()
+        ingredients = ingredients.split('\r\n\r\n')[1]
+        # if ingredients == EMPTY_DESCRIPTION:
+        #     ingredients = response.xpath(
+        #         '//div[@id="product-description-content-7"]//div/text()'
+        #     ).get()
         return {
             "ingredients": ingredients,
-            "name": response.xpath("//h1[1]/text()").get(),
+            "brand": response.xpath("//h1[1]/text()").get(),
+            "product_name": response.xpath("//h1[2]/text()").get(),
             "url": response.url,
             "category": category.name,
         }
 
     def get_product(self, response, i: int) -> str:
         return response.xpath(
-            f"//ul[@class='productListProducts_products']/li[{i}]//a[1]/@href"
+            f"//div[@class='css-1322gsb']/div[{i + 1}]//a[1]/@href"
         ).get()
