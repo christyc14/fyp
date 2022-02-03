@@ -5,6 +5,7 @@
 
 
 # useful for handling different item types with a single interface
+import re
 from itemadapter import ItemAdapter
 from scrapy.exceptions import DropItem
 
@@ -16,48 +17,28 @@ class CbscraperPipeline:
         if (
             not item["ingredients"]
             or item["url"] in self.unique
-            or "kit" in item["name"].lower()
-            or "set" in item["name"].lower()
-            or "system" in item["name"].lower()
-            or any([item["name"].startswith(name) for name in BLACKLIST_NAMES])
+            or "kit" in item["product_name"].lower()
+            or "set" in item["product_name"].lower()
+            or "system" in item["product_name"].lower()
+            or any([item["product_name"].startswith(name) for name in BLACKLIST_NAMES])
         ):
             raise DropItem
-        item["ingredients"] = list(map(str.strip, item["ingredients"].split(", ")))
+        item["ingredients"] = list(map(str.strip, re.split(",(?![^()]*\))", item["ingredients"])))
         self.unique.add(item["url"])
         return item
 
 
 BLACKLIST_NAMES = [
-    "Sunday Riley A+ High-Dose Retinoid Serum",
-    "Dr.Jart+ Cryo Rubber Mask",
-    "NIOD Copper Amino Isolate Serum",
-    "MALIN + GOETZ Salicylic Gel",
-    "Pai Skincare",
-    "Augustinus Bader Discovery Size The Cream",
-    "Augustinus Bader The Cream",
-    "La Mer The Oil Absorbing Tonic",
-    "Chantecaille Rice & Geranium Foaming Cleanser",
-    "Anthony SPF30 Day Cream",
-    "Sunday Riley C.E.O. Vitamin C Rich Hydration Cream",
-    "Alpha-H H8 3 Step",
-    "Tan-Luxe Super Glow Intensive Night Treatment Mask",
-    "Goldfaden MD Doctor's Scrub and Bright Eyes Duo",
-    "Slip Silk Sleep Mask",
-    "La Mer The Mist",
-    "Shiseido Exclusive Vital Perfection LiftDefine Radiance Face Mask",
-    "Chantecaille Flower Harmonizing Cream",
-    "Sunday Riley A High-Dose Retinoid Serum",
-    "FOREO",
-    "Zitsticka Blur Potion Discoloration Brightening Supplement",
-    "The Konjac Sponge Company",
-    "Sunday Riley C.E.O. 15% Vitamin C Brightening Serum",
-    "D\u00e9esse Pro D\u00e9esse Professional LED Mask Next Generation",
-    "Chantecaille Bio Lifting Mask",
-    "By Terry Cellularose CC Serum 30ml",
-    "Chantecaille Gold Recovery Mask",
-    "La Mer",
-    "Chantecaille Flower Infused Cleansing Milk",
-    "Furtuna Skin X Jeremy Scott Collector's Edition",
-    "Dr. Barbara Sturm Brightening Face Cream",
-    "Aurelia London 3 Step Starter Collection"
-]
+    "Cr\u00e8me Ancienne\u00ae Soft Cream",
+    "Repairwear Uplifting Firming Cream Broad Spectrum SPF 15",
+    "GinZing\u2122 Oil- Free Energy Boosting Gel Moisturizer",
+    "Clean Screen Mineral SPF 30 Mattifying Face Sunscreen",
+    "Superkind Fragrance-Free Fortifying Moisturizer",
+    "Perfectly Clean Multi-Action Toning Lotion/Refiner",
+    "Black Label Detox BB Beauty Balm SPF 30",
+    "Turnaround Overnight Revitalizing Moisturizer",
+    "Even Better Skin Tone Correcting Moisturizer Broad Spectrum SPF 20",
+    "Repairwear Laser Focus Line Smoothing Cream Broad Spectrum SPF 15 for Very Dry to Dry Combination Skin",
+    "Revitalizing Supreme+ Night Intensive Restorative Cr\u00e8me Moisturizer",
+    "Vitamin C+ Collagen Deep Cream",
+    ]

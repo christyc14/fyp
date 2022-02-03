@@ -2,6 +2,7 @@ from typing import Dict, List, Union
 from zlib import DEF_BUF_SIZE
 import json_lines
 import numpy as np
+import re
 
 if __name__ == "__main__":
     print("Hello world!")
@@ -27,20 +28,32 @@ def recommender(opt):
     for item in products:
         if opt == item['category']:
             df.append(item)
-    # print(df)
     
-# creating a dictionary of ingredients, need to clean up ingredient (eg with *s, multiple names for water)
-    ingred_index = {}
-    igs = []
-    index = 0
-    i = 0
+# creating a dictionary of ingredients, and cleaning up the dataset
+    # ingred_index = set()
+    # igs = []
+    # # index = 0
+    # i = 0
+    # for item in df:
+    #     igs.append(item['ingredients'])
+    #     for i in range(len(item['ingredients'])):
+    #         ingr = re.sub(r"\(([^)]*)\)|(([0-9]\d{0,2}(\.\d{1,3})*(,\d+)?)(%|mg|units))|(<\/?i>)|(\/.+)|(\\.+)|\[([^\]]*)\]", '', item['ingredients'][i])
+    #         if ingr.lower() == "water" or ingr.lower() == "aqua" or ingr.lower() == "eau":
+    #             ingr = "Water"
+    #         if ingr not in ingred_index:
+    #             ingred_index.add(ingr)
+    #         # index +=1
+    output = []
     for item in df:
-        igs.append(item['ingredients'])
+        ings = []
         for i in range(len(item['ingredients'])):
-            if item['ingredients'][i] not in ingred_index:
-                ingred_index[index] = item['ingredients'][i]
-            index +=1
-    print(ingred_index)
+            ingr = re.sub(r"\(([^)]*)\)|(([0-9]\d{0,2}(\.\d{1,3})*(,\d+)?)(%|mg|units))|(<\/?i>)|(\/.+)|(\\.+)|\[([^\]]*)\]", '', item['ingredients'][i])
+            if ingr.lower() == "water" or ingr.lower() == "aqua" or ingr.lower() == "eau":
+                ingr = "Water"
+            ings.append(ingr)
+        output.append(ings)
+    
+    enc = OneHotEncoder(handle_unknown='ignore')
 # mapping encodings to items
     X = len(df)
     Y = len(ingred_index)
@@ -51,14 +64,11 @@ def recommender(opt):
         a = np.zeros(Y)
         for i in ing:
             #get the index for each ingredient
-            # index = ingred_index[i]
             index = list(ingred_index.keys())[list(ingred_index.values()).index(i)]
-            # print(index)
             a[index] = 1
         return a 
     
     i = 0
-    print(len(igs))
     for ingreds in igs:
         big_matrix[i, :] = encoder(ingreds)
         i += 1

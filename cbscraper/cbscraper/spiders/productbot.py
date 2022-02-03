@@ -5,7 +5,7 @@ import re
 from scrapy import Request, Spider
 
 BASE_URL = "https://www.sephora.com"
-NUM_PAGES = 2
+NUM_PAGES = 15
 EMPTY_DESCRIPTION = "\n\n                              "
 
 
@@ -15,7 +15,7 @@ class Category(Enum):
     MOISTURISER = "moisturizer-skincare"
     SERUM = "face-serum"
     MASKS = "exfoliating-scrub-exfoliator"
-    # SPF = "moisturisers/spfs.list"
+    SPF = "face-sunscreen"
 
     def gen_cb_url(self, i: int) -> str:
         return f"{BASE_URL}/shop/{self.value}?currentPage={i}"
@@ -41,23 +41,23 @@ class ProductbotSpider(Spider):
                 url=product_url,
                 callback=self.parse_ingredients,
                 cb_kwargs=dict(category=get_category_from_url(response.url)),
+                meta={"splash": {"endpoint": "render.html", "args": {"wait": 0.5}}},
             )
             i += 1
             product_url = self.get_product(response, i)
 
     def parse_ingredients(self, response, category: Category):
-        ingredients = response.xpath(
-            '//div[@id="ingredients"]/div/div/text()'
-        ).get()
-        ingredients = ingredients.split('\r\n\r\n')[1]
-        # if ingredients == EMPTY_DESCRIPTION:
-        #     ingredients = response.xpath(
-        #         '//div[@id="product-description-content-7"]//div/text()'
-        #     ).get()
+        print(response.url)
+        item_data = json.loads(response.xpath("//*[@id='linkStore']/text()").get())
+        ingredients = item_data[
+            "page"
+        ]["product"]["currentSku"]["ingredientDesc"].split("<br><br>")[1].split("<br>")[-1]
+        brand = item_data["page"]["product"]["productDetails"]["brand"]["displayName"]
+        product_name = item_data["page"]["product"]["productDetails"]["displayName"]
         return {
             "ingredients": ingredients,
-            "brand": response.xpath("//h1[1]/text()").get(),
-            "product_name": response.xpath("//h1[2]/text()").get(),
+            "brand": brand,
+            "product_name": product_name,
             "url": response.url,
             "category": category.name,
         }
