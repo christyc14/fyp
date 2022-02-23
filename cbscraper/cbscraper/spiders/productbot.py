@@ -5,7 +5,7 @@ import re
 from scrapy import Request, Spider
 
 BASE_URL = "https://www.sephora.com"
-NUM_PAGES = 15
+NUM_PAGES = 3
 EMPTY_DESCRIPTION = "\n\n                              "
 
 
@@ -41,25 +41,30 @@ class ProductbotSpider(Spider):
                 url=product_url,
                 callback=self.parse_ingredients,
                 cb_kwargs=dict(category=get_category_from_url(response.url)),
-                meta={"splash": {"endpoint": "render.html", "args": {"wait": 0.5}}},
+                meta={"splash": {"endpoint": "render.html", "args": {"wait": 0.5}, "splash_headers": {"Connection": "keep-alive"}}},
             )
             i += 1
             product_url = self.get_product(response, i)
 
     def parse_ingredients(self, response, category: Category):
-        print(response.url)
         item_data = json.loads(response.xpath("//*[@id='linkStore']/text()").get())
         ingredients = item_data[
             "page"
         ]["product"]["currentSku"]["ingredientDesc"].split("<br><br>")[1].split("<br>")[-1]
         brand = item_data["page"]["product"]["productDetails"]["brand"]["displayName"]
         product_name = item_data["page"]["product"]["productDetails"]["displayName"]
+        avg_rating = item_data["page"]["product"]["productDetails"]["rating"]
+        num_reviews = item_data["page"]["product"]["productDetails"]["reviews"]
+        num_loves = item_data["page"]["product"]["productDetails"]["lovesCount"]
         return {
             "ingredients": ingredients,
             "brand": brand,
             "product_name": product_name,
             "url": response.url,
             "category": category.name,
+            "avg_rating": avg_rating,
+            "num_reviews": num_reviews,
+            "num_loves": num_loves
         }
 
     def get_product(self, response, i: int) -> str:

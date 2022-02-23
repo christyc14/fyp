@@ -3,78 +3,87 @@ from zlib import DEF_BUF_SIZE
 import json_lines
 import numpy as np
 import re
+from sklearn.preprocessing import MultiLabelBinarizer
+from sklearn.manifold import TSNE
+import pandas as pd
+import json
+# from bokeh.io import show, curdoc, output_notebook, push_notebook
+# from bokeh.plotting import figure
+# from bokeh.models import ColumnDataSource, HoverTool, Select, Paragraph, TextInput
+# from bokeh.layouts import widgetbox, column, row
+# from ipywidgets import interact 
+from scipy.spatial import distance
 
 if __name__ == "__main__":
     print("Hello world!")
 
 products: List[Dict[str, Union[str, List[str]]]] = []
 # input data into List
-with open('cbscraper/product_urls.jsonlines', 'rb') as f:
-    for item in json_lines.reader(f):
-        products.append(item)
+with open("cbscraper/product_urls.jsonlines", "rb") as f:
+    unique = set()
+    lines = f.read().splitlines()
+    df_inter = pd.DataFrame(lines)
+    df_inter.columns = ["json_element"]
+    df_inter["json_element"].apply(json.loads)
+    df = pd.json_normalize(df_inter["json_element"].apply(json.loads))
+    
+# to save myself if i do something dumb and run the scraper without deleting the .jsonlines file
+df.drop_duplicates(subset=['url'], inplace=True)
+print(len(df.index))
 
 # option: category of product, eg cleanser
-option = []
-seen = set()
-for item in products:
-    if item['category'] not in seen:
-        seen.add(item['category'])
-        option.append(item['category'])
-print(option)
+categories = set(df.category.values)
 # filter data by given option
 
-def recommender(opt):
-    df = []
-    for item in products:
-        if opt == item['category']:
-            df.append(item)
-    
-# creating a dictionary of ingredients, and cleaning up the dataset
-    # ingred_index = set()
-    # igs = []
-    # # index = 0
-    # i = 0
-    # for item in df:
-    #     igs.append(item['ingredients'])
-    #     for i in range(len(item['ingredients'])):
-    #         ingr = re.sub(r"\(([^)]*)\)|(([0-9]\d{0,2}(\.\d{1,3})*(,\d+)?)(%|mg|units))|(<\/?i>)|(\/.+)|(\\.+)|\[([^\]]*)\]", '', item['ingredients'][i])
-    #         if ingr.lower() == "water" or ingr.lower() == "aqua" or ingr.lower() == "eau":
-    #             ingr = "Water"
-    #         if ingr not in ingred_index:
-    #             ingred_index.add(ingr)
-    #         # index +=1
-    output = []
-    for item in df:
-        ings = []
-        for i in range(len(item['ingredients'])):
-            ingr = re.sub(r"\(([^)]*)\)|(([0-9]\d{0,2}(\.\d{1,3})*(,\d+)?)(%|mg|units))|(<\/?i>)|(\/.+)|(\\.+)|\[([^\]]*)\]", '', item['ingredients'][i])
-            if ingr.lower() == "water" or ingr.lower() == "aqua" or ingr.lower() == "eau":
-                ingr = "Water"
-            ings.append(ingr)
-        output.append(ings)
-    
-    enc = OneHotEncoder(handle_unknown='ignore')
-# mapping encodings to items
-    X = len(df)
-    Y = len(ingred_index)
+def preprocess_ingredients(ingredients):
+    processed_ingredients = []
+    for i in range(len(ingredients)):
+        processed_ingredient = re.sub(
+            r"\(([^)]*)\)|(([0-9]\d{0,2}(\.\d{1,3})*(,\d+)?)(%|mg|units))|(<\/?i>)|(\/.+)|(\\.+)|\[([^\]]*)\]",
+            "",
+            ingredients[i],
+        ).strip()
+        if (
+            processed_ingredient.lower() == "water"
+            or processed_ingredient.lower() == "aqua"
+            or processed_ingredient.lower() == "eau"
+        ):
+            processed_ingredient = "Water"
+        processed_ingredients.append(processed_ingredient)
+    return processed_ingredients
 
-    big_matrix = np.zeros((X,Y))
 
-    def encoder(ing):
-        a = np.zeros(Y)
-        for i in ing:
-            #get the index for each ingredient
-            index = list(ingred_index.keys())[list(ingred_index.values()).index(i)]
-            a[index] = 1
-        return a 
-    
-    i = 0
-    for ingreds in igs:
-        big_matrix[i, :] = encoder(ingreds)
-        i += 1
+def recommender(opt, df):
+    df = df[df.category == opt]
+    df["ingredients"] = df["ingredients"].map(preprocess_ingredients)
+    mlb = MultiLabelBinarizer()
+    output = mlb.fit_transform(df.ingredients.values)
+    df = df.drop(["ingredients"], axis=1)
+    # tsne to reduce dimensionality
+    model = TSNE(n_components=2, learning_rate=200)
+    tsne_features = model.fit_transform(output)
 
-#tsne to reduce dimensionality
+    df["X"] = tsne_features[:, 0]
+    df["Y"] = tsne_features[:, 1]
 
-#can add the multiple products later
+    return df
 
-print(recommender('MOISTURISER'))
+df_tmp = recommender("TONER", df)
+df_tmp['dist'] = 0.0
+item1 = df_tmp[df_tmp["product_name"] == "Squalane + BHA Pore-Minimizing Toner"]
+print(item1)
+item2 = df_tmp[df_tmp["product_name"] == "Mandelic Acid + Superfood Unity Exfoliant"]
+item3 = df_tmp[df_tmp["product_name"] == "Watermelon Glow PHA +BHA Pore-Tight Toner"]
+
+#similarity metric
+p1 = np.array([item1["X"], item1["Y"]]).reshape(1, -1)
+p2 = np.array([item2["X"], item2["Y"]]).reshape(1, -1)
+p3 = np.array([item3["X"], item3["Y"]]).reshape(1, -1)
+for ind, item in df_tmp.iterrows():
+    pn = np.array([item.X, item.Y]).reshape(-1, 1)
+    df_tmp.at[ind, 'dist'] = min(distance.chebyshev(p1, pn), distance.chebyshev(p2, pn), distance.chebyshev(p3, pn))
+
+df_tmp = df_tmp.sort_values('dist')
+mask = df_tmp[(df_tmp['product_name'].ne(item1['product_name'])) & (df_tmp['product_name'].ne(item2['product_name'])) & (df_tmp['product_name'].ne(item3['product_name']))]
+print(mask[['brand', 'product_name', 'url', 'avg_rating']].head(10))
+

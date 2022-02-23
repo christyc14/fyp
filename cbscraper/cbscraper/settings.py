@@ -15,7 +15,7 @@ NEWSPIDER_MODULE = "cbscraper.spiders"
 SPLASH_URL = "http://0.0.0.0:8050"
 
 # Crawl responsibly by identifying yourself (and your website) on the user-agent
-# USER_AGENT = 'cbscraper (+http://www.yourdomain.com)'
+USER_AGENT = 'Mozilla/5.0 (Macintosh; Intel Mac OS X 10_15_7) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/98.0.4758.102 Safari/537.36'
 
 # Obey robots.txt rules
 ROBOTSTXT_OBEY = True
@@ -93,3 +93,4 @@ ITEM_PIPELINES = {
 DUPEFILTER_CLASS = 'scrapy_splash.SplashAwareDupeFilter'
 
 
+TELNETCONSOLE_PORT = None

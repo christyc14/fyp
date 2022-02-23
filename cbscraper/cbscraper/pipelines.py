@@ -41,4 +41,10 @@ BLACKLIST_NAMES = [
     "Repairwear Laser Focus Line Smoothing Cream Broad Spectrum SPF 15 for Very Dry to Dry Combination Skin",
     "Revitalizing Supreme+ Night Intensive Restorative Cr\u00e8me Moisturizer",
     "Vitamin C+ Collagen Deep Cream",
-    ]
+    "The Radiant SkinTint SPF 30",
+    "Triple Vitamin C Brightening Bounce Cream Moisturizer",
+    "Seaberry Moisturizing Face Oil",
+    "Pore Refining Solutions Stay-Matte Hydrator",
+    "Mini The Moisturizing Cool Gel Cream",
+    "Extra Illuminating Moisture Balm",
+    "The Tonic"]
