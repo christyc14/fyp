@@ -25,6 +25,9 @@ def get_category_from_url(url: str) -> Category:
     return Category(url.split("/")[-1].split("?")[0])
 
 
+def gen_reviews_url(offset: int, product_id: str):
+    return f"https://api.bazaarvoice.com/data/reviews.json?Filter=contentlocale%3Aen*&Filter=ProductId%3A{product_id}&Limit=100&Offset={offset}&Include=Products%2CComments&Stats=Reviews&passkey=caQ0pQXZTqFVYA1yYnnJ9emgUiW59DXA85Kxry8Ma02HE&apiversion=5.4&Locale=en_US"
+    
 class ProductbotSpider(Spider):
     name = "productbot"
     start_urls = [
@@ -56,6 +59,20 @@ class ProductbotSpider(Spider):
         avg_rating = item_data["page"]["product"]["productDetails"]["rating"]
         num_reviews = item_data["page"]["product"]["productDetails"]["reviews"]
         num_loves = item_data["page"]["product"]["productDetails"]["lovesCount"]
+
+        # Request reviews
+        offset = 0
+        product_id = item_data["page"]["product"]["productDetails"]["productId"]
+        reviews_url = gen_reviews_url(offset, product_id)
+        review_data = []
+        while True:
+            reviews = requests.get(reviews_url).json()
+            if reviews["Results"] == []:
+                break
+            review_data += reviews["Results"]
+            offset += 100
+            reviews_url = gen_reviews_url(offset, product_id)
+
         return {
             "ingredients": ingredients,
             "brand": brand,
@@ -64,7 +81,8 @@ class ProductbotSpider(Spider):
             "category": category.name,
             "avg_rating": avg_rating,
             "num_reviews": num_reviews,
-            "num_loves": num_loves
+            "num_loves": num_loves,
+            "review_data": review_data
         }
 
     def get_product(self, response, i: int) -> str:
