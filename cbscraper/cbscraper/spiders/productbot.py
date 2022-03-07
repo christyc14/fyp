@@ -3,6 +3,7 @@ from enum import Enum, auto
 import json
 import re
 from scrapy import Request, Spider
+import requests
 
 BASE_URL = "https://www.sephora.com"
 NUM_PAGES = 3
@@ -24,7 +25,6 @@ class Category(Enum):
 def get_category_from_url(url: str) -> Category:
     return Category(url.split("/")[-1].split("?")[0])
 
-
 def gen_reviews_url(offset: int, product_id: str):
     return f"https://api.bazaarvoice.com/data/reviews.json?Filter=contentlocale%3Aen*&Filter=ProductId%3A{product_id}&Limit=100&Offset={offset}&Include=Products%2CComments&Stats=Reviews&passkey=caQ0pQXZTqFVYA1yYnnJ9emgUiW59DXA85Kxry8Ma02HE&apiversion=5.4&Locale=en_US"
     
@@ -44,22 +44,19 @@ class ProductbotSpider(Spider):
                 url=product_url,
                 callback=self.parse_ingredients,
                 cb_kwargs=dict(category=get_category_from_url(response.url)),
-                meta={"splash": {"endpoint": "render.html", "args": {"wait": 0.5}, "splash_headers": {"Connection": "keep-alive"}}},
+                meta={
+                    "splash": {
+                        "endpoint": "render.html", 
+                        "args": {"wait": 0.5}, 
+                        "splash_headers": {"Connection": "keep-alive"}
+                    }
+                },
             )
             i += 1
             product_url = self.get_product(response, i)
 
     def parse_ingredients(self, response, category: Category):
         item_data = json.loads(response.xpath("//*[@id='linkStore']/text()").get())
-        ingredients = item_data[
-            "page"
-        ]["product"]["currentSku"]["ingredientDesc"].split("<br><br>")[1].split("<br>")[-1]
-        brand = item_data["page"]["product"]["productDetails"]["brand"]["displayName"]
-        product_name = item_data["page"]["product"]["productDetails"]["displayName"]
-        avg_rating = item_data["page"]["product"]["productDetails"]["rating"]
-        num_reviews = item_data["page"]["product"]["productDetails"]["reviews"]
-        num_loves = item_data["page"]["product"]["productDetails"]["lovesCount"]
-
         # Request reviews
         offset = 0
         product_id = item_data["page"]["product"]["productDetails"]["productId"]
@@ -72,7 +69,16 @@ class ProductbotSpider(Spider):
             review_data += reviews["Results"]
             offset += 100
             reviews_url = gen_reviews_url(offset, product_id)
-
+        ingredients = (
+            item_data["page"]["product"]["currentSku"]["ingredientDesc"]
+            .split("<br><br>")[1]
+            .split("<br>")[-1]
+        )
+        brand = item_data["page"]["product"]["productDetails"]["brand"]["displayName"]
+        product_name = item_data["page"]["product"]["productDetails"]["displayName"]
+        avg_rating = item_data["page"]["product"]["productDetails"]["rating"]
+        num_reviews = item_data["page"]["product"]["productDetails"]["reviews"]
+        num_loves = item_data["page"]["product"]["productDetails"]["lovesCount"]
         return {
             "ingredients": ingredients,
             "brand": brand,
