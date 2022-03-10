@@ -16,6 +16,7 @@ bokeh = "^2.4.2"
 ipywidgets = "^7.6.5"
 scipy = "^1.8.0"
 scrapy = "^2.5.1"
+tqdm = "^4.63.0"
 
 [tool.poetry.dev-dependencies]
 black = {version = "^21.12b0", allow-prereleases = true}
