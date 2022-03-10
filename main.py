@@ -10,6 +10,7 @@ from sklearn.preprocessing import StandardScaler
 import pandas as pd
 import json
 from scipy.sparse.linalg import svds
+
 # from bokeh.io import show, curdoc, output_notebook, push_notebook
 # from bokeh.plotting import figure
 # from bokeh.models import ColumnDataSource, HoverTool, Select, Paragraph, TextInput
@@ -56,7 +57,7 @@ def preprocess_ingredients(ingredients):
     return processed_ingredients
 
 
-def recommender(opt, df):
+def content_recommender(opt, _item1, _item2, _item3, df):
     df = df[df.category == opt]
     df["ingredients"] = df["ingredients"].map(preprocess_ingredients)
     mlb = MultiLabelBinarizer()
@@ -68,36 +69,33 @@ def recommender(opt, df):
 
     df["X"] = tsne_features[:, 0]
     df["Y"] = tsne_features[:, 1]
+    df["dist"] = 0.0
+    item1 = df[df["product_name"] == _item1]
+    item2 = df[df["product_name"] == _item2]
+    item3 = df[df["product_name"] == _item3]
 
-    return df
+    p1 = np.array([item1["X"], item1["Y"]]).reshape(1, -1)
+    p2 = np.array([item2["X"], item2["Y"]]).reshape(1, -1)
+    p3 = np.array([item3["X"], item3["Y"]]).reshape(1, -1)
+    for ind, item in df.iterrows():
+        pn = np.array([item.X, item.Y]).reshape(-1, 1)
+        df.at[ind, "dist"] = min(
+            distance.chebyshev(p1, pn),
+            distance.chebyshev(p2, pn),
+            distance.chebyshev(p3, pn),
+        )
+    df = df.sort_values("dist")
+
+    mask = df[
+        (df["product_name"].ne(item1["product_name"]))
+        & (df["product_name"].ne(item2["product_name"]))
+        & (df["product_name"].ne(item3["product_name"]))
+    ]
+    return mask
 
 
-df_tmp = recommender("TONER", df)
-df_tmp["dist"] = 0.0
-item1 = df_tmp[df_tmp["product_name"] == "Squalane + BHA Pore-Minimizing Toner"]
-# print(item1)
-item2 = df_tmp[df_tmp["product_name"] == "Mandelic Acid + Superfood Unity Exfoliant"]
-item3 = df_tmp[df_tmp["product_name"] == "Watermelon Glow PHA +BHA Pore-Tight Toner"]
-
-# similarity metric
-p1 = np.array([item1["X"], item1["Y"]]).reshape(1, -1)
-p2 = np.array([item2["X"], item2["Y"]]).reshape(1, -1)
-p3 = np.array([item3["X"], item3["Y"]]).reshape(1, -1)
-for ind, item in df_tmp.iterrows():
-    pn = np.array([item.X, item.Y]).reshape(-1, 1)
-    df_tmp.at[ind, "dist"] = min(
-        distance.chebyshev(p1, pn),
-        distance.chebyshev(p2, pn),
-        distance.chebyshev(p3, pn),
-    )
-
-df_tmp = df_tmp.sort_values("dist")
-mask = df_tmp[
-    (df_tmp["product_name"].ne(item1["product_name"]))
-    & (df_tmp["product_name"].ne(item2["product_name"]))
-    & (df_tmp["product_name"].ne(item3["product_name"]))
-]
-print(mask[['brand', 'product_name', 'url', 'avg_rating']].head(10))
+df_tmp = content_recommender("TONER", "Squalane + BHA Pore-Minimizing Toner", "Mandelic Acid + Superfood Unity Exfoliant", "Watermelon Glow PHA +BHA Pore-Tight Toner", df)
+print(df_tmp[["brand", "product_name", "url", "avg_rating"]].head(10))
 
 # def collab_rec(df_tmp, username)
 reviews = df_tmp.explode("review_data")
@@ -111,7 +109,9 @@ product_index = dict(zip(df_tmp["url"].values, range(len(df_tmp["url"]))))
 username_index = dict(zip(multiple_rating_users, range(len(multiple_rating_users))))
 
 matrix = np.zeros((len(multiple_rating_users), len(df_tmp["url"])))
-for user, rating, url in zip(reviews.username.values, reviews.rating.values, reviews.url.values):
+for user, rating, url in zip(
+    reviews.username.values, reviews.rating.values, reviews.url.values
+):
     matrix[username_index[user]][product_index[url]] = rating
 
 ss = StandardScaler()
