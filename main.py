@@ -51,7 +51,7 @@ def preprocess_ingredients(ingredients):
     return processed_ingredients
 
 
-def content_recommender(opt, _item1, _item2, _item3, df):
+def content_recommender(opt, _item1, _item2, _item3, num_recs, df):
     df = df[df.category == opt]
     df["ingredients"] = df["ingredients"].map(preprocess_ingredients)
     mlb = MultiLabelBinarizer()
@@ -85,7 +85,7 @@ def content_recommender(opt, _item1, _item2, _item3, df):
         & (df["product_name"].ne(item2["product_name"]))
         & (df["product_name"].ne(item3["product_name"]))
     ]
-    return mask
+    return mask.head(num_recs)
 
 
 df_tmp = content_recommender(
@@ -93,12 +93,13 @@ df_tmp = content_recommender(
     "Squalane + BHA Pore-Minimizing Toner",
     "Mandelic Acid + Superfood Unity Exfoliant",
     "Watermelon Glow PHA +BHA Pore-Tight Toner",
+    10,
     df,
 )
 # print(df_tmp[["brand", "product_name", "url", "avg_rating"]].head(10))
 
 
-def collab_recommender(df_tmp, username):
+def collab_recommender(df_tmp, num_recs, username):
     reviews = df_tmp.explode("review_data")
     reviews["username"] = reviews["review_data"].apply(lambda x: x["UserNickname"])
     reviews["rating"] = reviews["review_data"].apply(lambda x: x["Rating"])
@@ -127,7 +128,7 @@ def collab_recommender(df_tmp, username):
     user_index = username
 
     sorted_user_preds = preds_df.loc[user_index].sort_values(ascending=False)
-    sorted_user_preds = sorted_user_preds.head(5)
+    sorted_user_preds = sorted_user_preds.head(num_recs)
     # we want those that they haven't already tested
     collab_df = pd.merge(
         df_tmp,
@@ -141,7 +142,7 @@ def collab_recommender(df_tmp, username):
 
 
 print(
-    collab_recommender(df_tmp, "klainee")[
+    collab_recommender(df_tmp, 10, "klainee")[
         ["brand", "product_name", "url", "pred_rating"]
     ]
 )
