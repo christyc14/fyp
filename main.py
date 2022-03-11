@@ -10,12 +10,6 @@ from sklearn.preprocessing import StandardScaler
 import pandas as pd
 import json
 from scipy.sparse.linalg import svds
-
-# from bokeh.io import show, curdoc, output_notebook, push_notebook
-# from bokeh.plotting import figure
-# from bokeh.models import ColumnDataSource, HoverTool, Select, Paragraph, TextInput
-# from bokeh.layouts import widgetbox, column, row
-# from ipywidgets import interact
 from scipy.spatial import distance
 
 if __name__ == "__main__":
@@ -94,31 +88,60 @@ def content_recommender(opt, _item1, _item2, _item3, df):
     return mask
 
 
-df_tmp = content_recommender("TONER", "Squalane + BHA Pore-Minimizing Toner", "Mandelic Acid + Superfood Unity Exfoliant", "Watermelon Glow PHA +BHA Pore-Tight Toner", df)
-print(df_tmp[["brand", "product_name", "url", "avg_rating"]].head(10))
-
-# def collab_rec(df_tmp, username)
-reviews = df_tmp.explode("review_data")
-reviews["username"] = reviews["review_data"].apply(lambda x: x["UserNickname"])
-reviews["rating"] = reviews["review_data"].apply(lambda x: x["Rating"])
-grouped_reviews = reviews.groupby("username")["review_data"].apply(list)
-multiple_rating_users = set(grouped_reviews[grouped_reviews.map(len) > 1].index)
-reviews = reviews[reviews.username.isin(multiple_rating_users)]
-
-product_index = dict(zip(df_tmp["url"].values, range(len(df_tmp["url"]))))
-username_index = dict(zip(multiple_rating_users, range(len(multiple_rating_users))))
-
-matrix = np.zeros((len(multiple_rating_users), len(df_tmp["url"])))
-for user, rating, url in zip(
-    reviews.username.values, reviews.rating.values, reviews.url.values
-):
-    matrix[username_index[user]][product_index[url]] = rating
-
-ss = StandardScaler()
-matrix = ss.fit_transform(matrix)
-U, S, V = svds(matrix)
+df_tmp = content_recommender(
+    "TONER",
+    "Squalane + BHA Pore-Minimizing Toner",
+    "Mandelic Acid + Superfood Unity Exfoliant",
+    "Watermelon Glow PHA +BHA Pore-Tight Toner",
+    df,
+)
+# print(df_tmp[["brand", "product_name", "url", "avg_rating"]].head(10))
 
 
-all_user_predicted_rating = ss.inverse_transform(U @ np.diag(S) @ V)
-print(matrix)
-print(all_user_predicted_rating)
+def collab_recommender(df_tmp, username):
+    reviews = df_tmp.explode("review_data")
+    reviews["username"] = reviews["review_data"].apply(lambda x: x["UserNickname"])
+    reviews["rating"] = reviews["review_data"].apply(lambda x: x["Rating"])
+    grouped_reviews = reviews.groupby("username")["review_data"].apply(list)
+    multiple_rating_users = set(grouped_reviews[grouped_reviews.map(len) > 1].index)
+    multi_reviews = reviews[reviews.username.isin(multiple_rating_users)]
+    product_index = dict(zip(df_tmp["url"].values, range(len(df_tmp["url"]))))
+    username_index = dict(zip(multiple_rating_users, range(len(multiple_rating_users))))
+    matrix = np.zeros((len(multiple_rating_users), len(df_tmp["url"])))
+    for user, rating, url in zip(
+        multi_reviews.username.values,
+        multi_reviews.rating.values,
+        multi_reviews.url.values,
+    ):
+        matrix[username_index[user]][product_index[url]] = rating
+
+    ss = StandardScaler()
+    normatrix = ss.fit_transform(matrix)
+    U, S, V = svds(normatrix)
+    all_user_predicted_rating = ss.inverse_transform(U @ np.diag(S) @ V)
+
+    preds_df = pd.DataFrame(
+        all_user_predicted_rating, columns=product_index, index=username_index
+    )
+
+    user_index = username
+
+    sorted_user_preds = preds_df.loc[user_index].sort_values(ascending=False)
+    sorted_user_preds = sorted_user_preds.head(5)
+    # we want those that they haven't already tested
+    collab_df = pd.merge(
+        df_tmp,
+        sorted_user_preds.to_frame(),
+        left_on="url",
+        right_index=True,
+        how="right",
+    )
+    collab_df.rename(columns={user_index: "pred_rating"}, inplace=True)
+    return collab_df
+
+
+print(
+    collab_recommender(df_tmp, "klainee")[
+        ["brand", "product_name", "url", "pred_rating"]
+    ]
+)
