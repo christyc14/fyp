@@ -148,5 +148,3 @@ print(
         ["brand", "product_name", "url", "pred_rating"]
     ]
 )
-
-# def review_recommender(df, num_recs):
