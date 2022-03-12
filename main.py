@@ -87,21 +87,8 @@ def content_recommender(opt, _item1, _item2, _item3, num_recs, df):
     ]
     return mask.head(num_recs)
 
-
-df_tmp = content_recommender(
-    "TONER",
-    "Squalane + BHA Pore-Minimizing Toner",
-    "Mandelic Acid + Superfood Unity Exfoliant",
-    "Watermelon Glow PHA +BHA Pore-Tight Toner",
-    10,
-    df,
-)
-# print(df_tmp[["brand", "product_name", "url", "avg_rating"]].head(10))
-
-
 def collab_recommender(df_tmp, num_recs, username):
     reviews = df_tmp.explode("review_data")
-    dictionary = {}
     reviews["username"] = reviews["review_data"].apply(lambda x: x["UserNickname"])
     reviews["rating"] = reviews["review_data"].apply(lambda x: x["Rating"])
     grouped_reviews = reviews.groupby("username")["review_data"].apply(list)
@@ -129,7 +116,9 @@ def collab_recommender(df_tmp, num_recs, username):
     )
 
     sorted_user_preds = preds_df.loc[username].sort_values(ascending=False)
-    sorted_user_preds = sorted_user_preds[~sorted_user_preds.index.isin(products_reviewed_per_user[username])]
+    sorted_user_preds = sorted_user_preds[
+        ~sorted_user_preds.index.isin(products_reviewed_per_user[username])
+    ]
     sorted_user_preds = sorted_user_preds.head(num_recs)
     # we want those that they haven't already tested
     collab_df = pd.merge(
@@ -142,9 +131,46 @@ def collab_recommender(df_tmp, num_recs, username):
     collab_df.rename(columns={username: "pred_rating"}, inplace=True)
     return collab_df
 
-
-print(
-    collab_recommender(df_tmp, 10, "klainee")[
-        ["brand", "product_name", "url", "pred_rating"]
-    ]
-)
+print("Welcome!")
+print(categories)
+print("pls enter the category:")
+cat = str(input())
+display_product_names = df[df.category == cat]
+print(display_product_names[["brand", "product_name"]])
+print("pls enter your top 3 products indices, separated by a new line")
+item1 = int(input())
+item2 = int(input())
+item3 = int(input())
+print("pls enter # of recs:")
+num_recs = int(input())
+reviews = display_product_names.explode("review_data")
+reviews["username"] = reviews["review_data"].apply(lambda x: x["UserNickname"])
+grouped_reviews = reviews.groupby("username")["review_data"].apply(list)
+multiple_rating_users = set(grouped_reviews[grouped_reviews.map(len) > 1].index)
+print(multiple_rating_users)
+print("pls enter sephora userid, if you don't have one just enter 'none':")
+username = str(input())
+if username == "none":
+    print("your ingredients based recommendations are:")
+    cbf = content_recommender(
+        cat,
+        df.product_name.values[item1],
+        df.product_name.values[item2],
+        df.product_name.values[item3],
+        num_recs,
+        df,
+    )
+    print(cbf[["brand", "product_name", "url", "avg_rating"]])
+else:
+    cbf = content_recommender(
+        cat,
+        df.product_name.values[item1],
+        df.product_name.values[item2],
+        df.product_name.values[item3],
+        num_recs + 10,
+        df,
+    )
+    cf = collab_recommender(cbf, num_recs, username)
+    print("your hybrid recommendations are:")
+    print(cf[["brand", "product_name", "url", "pred_rating"]])
+    print("thank u for using this service :)")
