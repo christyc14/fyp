@@ -101,11 +101,13 @@ df_tmp = content_recommender(
 
 def collab_recommender(df_tmp, num_recs, username):
     reviews = df_tmp.explode("review_data")
+    dictionary = {}
     reviews["username"] = reviews["review_data"].apply(lambda x: x["UserNickname"])
     reviews["rating"] = reviews["review_data"].apply(lambda x: x["Rating"])
     grouped_reviews = reviews.groupby("username")["review_data"].apply(list)
     multiple_rating_users = set(grouped_reviews[grouped_reviews.map(len) > 1].index)
     multi_reviews = reviews[reviews.username.isin(multiple_rating_users)]
+    products_reviewed_per_user = {u: set() for u in multiple_rating_users}
     product_index = dict(zip(df_tmp["url"].values, range(len(df_tmp["url"]))))
     username_index = dict(zip(multiple_rating_users, range(len(multiple_rating_users))))
     matrix = np.zeros((len(multiple_rating_users), len(df_tmp["url"])))
@@ -115,6 +117,7 @@ def collab_recommender(df_tmp, num_recs, username):
         multi_reviews.url.values,
     ):
         matrix[username_index[user]][product_index[url]] = rating
+        products_reviewed_per_user[user].add(url)
 
     ss = StandardScaler()
     normatrix = ss.fit_transform(matrix)
@@ -125,9 +128,8 @@ def collab_recommender(df_tmp, num_recs, username):
         all_user_predicted_rating, columns=product_index, index=username_index
     )
 
-    user_index = username
-
-    sorted_user_preds = preds_df.loc[user_index].sort_values(ascending=False)
+    sorted_user_preds = preds_df.loc[username].sort_values(ascending=False)
+    sorted_user_preds = sorted_user_preds[~sorted_user_preds.index.isin(products_reviewed_per_user[username])]
     sorted_user_preds = sorted_user_preds.head(num_recs)
     # we want those that they haven't already tested
     collab_df = pd.merge(
@@ -137,7 +139,7 @@ def collab_recommender(df_tmp, num_recs, username):
         right_index=True,
         how="right",
     )
-    collab_df.rename(columns={user_index: "pred_rating"}, inplace=True)
+    collab_df.rename(columns={username: "pred_rating"}, inplace=True)
     return collab_df
 
 
@@ -146,3 +148,5 @@ print(
         ["brand", "product_name", "url", "pred_rating"]
     ]
 )
+
+# def review_recommender(df, num_recs):
