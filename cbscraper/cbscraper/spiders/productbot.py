@@ -6,7 +6,7 @@ from scrapy import Request, Spider
 import requests
 
 BASE_URL = "https://www.sephora.com"
-NUM_PAGES = 3
+NUM_PAGES = 400
 EMPTY_DESCRIPTION = "\n\n                              "
 
 
@@ -72,7 +72,6 @@ class ProductbotSpider(Spider):
         ingredients = (
             item_data["page"]["product"]["currentSku"]["ingredientDesc"]
             .split("<br><br>")[1]
-            .split("<br>")[-1]
         )
         brand = item_data["page"]["product"]["productDetails"]["brand"]["displayName"]
         product_name = item_data["page"]["product"]["productDetails"]["displayName"]

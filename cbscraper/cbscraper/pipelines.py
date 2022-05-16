@@ -23,7 +23,7 @@ class CbscraperPipeline:
             or any([item["product_name"].startswith(name) for name in BLACKLIST_NAMES])
         ):
             raise DropItem
-        item["ingredients"] = list(map(str.strip, re.split(",(?![^()]*\))", item["ingredients"])))
+        item["ingredients"] = item["ingredients"].strip()
         self.unique.add(item["url"])
         return item
 

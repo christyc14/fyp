@@ -1,5 +1,8 @@
 cbscraper/product_urls_with_reviews.jsonlines
 cbscraper/product_urls_with_reviews_2.jsonlines
+cbscraper/product_urls_with_reviews_3.jsonlines
+big_data.jsonlines
+src/agModels-predictClass/*
 # Byte-compiled / optimized / DLL files
 __pycache__/
 *.py[cod]

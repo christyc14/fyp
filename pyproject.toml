@@ -6,17 +6,19 @@ authors = ["Christy Chan"]
 license = "MIT"
 
 [tool.poetry.dependencies]
-python = "^3.8,<=3.10"
-black = "^21.12b0"
+python = "^3.8,<3.10"
+autogluon = "^0.4.0"
 json-lines = "^0.5.0"
-numpy = "^1.22.1"
-scrapy-splash = "^0.8.0"
-pandas = "^1.4.0"
+numpy = "^1.22.3"
+pandas = "<1.4"
 bokeh = "^2.4.2"
-ipywidgets = "^7.6.5"
-scipy = "^1.8.0"
-scrapy = "^2.5.1"
-tqdm = "^4.63.0"
+scrapy-splash = "^0.8.0"
+scipy = "<1.8.0"
+ipywidgets = "^7.7.0"
+tqdm = "^4.64.0"
+streamlit = "^1.9.0"
+Scrapy = "^2.6.1"
+
 
 [tool.poetry.dev-dependencies]
 black = {version = "^21.12b0", allow-prereleases = true}
