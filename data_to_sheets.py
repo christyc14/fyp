@@ -54,8 +54,8 @@ def upload_blob(bucket_name, source_file_name, destination_blob_name):
 
     print(f"File {source_file_name} uploaded to {destination_blob_name}.")
 
-df.to_csv("sephora_scraped_data.csv")
+df.to_pickle('data.pkl')
 
 bucket_name = "sephora_scraped_data"
 
-upload_blob(bucket_name, "sephora_scraped_data.csv", "sephora_scraped_data.csv")
+upload_blob(bucket_name, "data.pkl", "data.pkl")

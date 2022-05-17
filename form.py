@@ -47,10 +47,10 @@ def load_data() -> pd.DataFrame:
         st.secrets["gcp_service_account"]
     )
     bucket = storage_client.bucket("sephora_scraped_data")
-    blob = bucket.blob("sephora_scraped_data.csv")
+    blob = bucket.blob("data.pkl")
     with NamedTemporaryFile() as f:
         blob.download_to_filename(f.name)
-        return pd.read_csv(f.name)
+        return pd.read_pickle(f.name)
 
 
 df: pd.DataFrame = load_data()
@@ -60,13 +60,13 @@ fields_to_csv = {}
 
 def follow_up_questions(cbf, cat, fields_to_csv):
     have_tried = st.radio(
-        "4. Have you tried any of these products?",
+        "Have you tried any of these products?",
         options=["Yes", "No"],
         key=f"{cat}_tried",
     )
     fields_to_csv[f"have_tried_svd_{cat}"] = have_tried
     if have_tried == "Yes":
-        st.write("5. Which of these have you tried?")
+        st.write("Which of these have you tried?")
         tried_products = [
             st.checkbox(item.product_name, key=f"{cat}_tried_products")
             for _, item in cbf.iterrows()
@@ -78,9 +78,9 @@ def follow_up_questions(cbf, cat, fields_to_csv):
         ]
         fields_to_csv[f"tried_products_svd_{cat}"] = tried_products_svd
     else:
-        tried_products = []
+        tried_products_svd = []
     willing = st.radio(
-        "6. Would you be willing to try any of these products?",
+        "Would you be willing to try any of these products?",
         key=f"{cat}_willing",
         options=["Yes", "No"],
     )
@@ -88,27 +88,27 @@ def follow_up_questions(cbf, cat, fields_to_csv):
     if willing == "Yes":
         willing_products_temp = []
         for _, item in cbf.iterrows():
-            if item.product_name not in tried_products:
+            if item.product_name not in tried_products_svd:
                 willing_products_temp.append(item.product_name)
         willing_products = [
             st.checkbox(item, key=f"_{item}") for item in willing_products_temp
         ]
         will_prod_names = [
-            row.product_name
-            for j, (_, row) in enumerate(cbf.iterrows())
+            item
+            for j, item in enumerate(willing_products_temp)
             if willing_products[j]
         ]
         fields_to_csv[f"will_prod_names_svd_{cat}"] = will_prod_names
 
 
 def svd(df, product_categories, fields_to_csv):
-    st.write("1. Which categories would you like recommendations for?")
+    st.write("Which categories would you like recommendations for?")
     checkboxes = [st.checkbox(cat, value=False) for cat in product_categories]
     cat_svd = [cat for i, cat in enumerate(product_categories) if checkboxes[i]]
     fields_to_csv["category"] = cat_svd
     top_3: Dict[str, List[str]] = {}
     if any(checkboxes):
-        st.write("2. Which are your top 3 products for each category?")
+        st.write("Which are your top 3 products for each category?")
         for i, checkbox in enumerate(checkboxes):
             if checkbox:
                 top_3[product_categories[i]] = st.multiselect(
@@ -121,7 +121,7 @@ def svd(df, product_categories, fields_to_csv):
             fields_to_csv["top3"] = top_3
             user_has_sephora: bool = (
                 st.radio(
-                    "3. Do you have a Sephora (US) account?",
+                    "Do you have a Sephora (US) account?",
                     options=["Yes", "No"],
                     index=1,
                 )
@@ -131,12 +131,36 @@ def svd(df, product_categories, fields_to_csv):
                 fields_to_csv[f"user_has_sephora"] = user_has_sephora
                 multiple_reviews: bool = (
                     st.radio(
-                        "3a. Have you written 2 or more reviews?", options=["Yes", "No"]
+                        "Have you written 2 or more reviews?", options=["Yes", "No"]
                     )
                     == "Yes"
                 )
             if user_has_sephora and multiple_reviews:
                 fields_to_csv["multiple_reviews"] = multiple_reviews
+                reviews = df.explode("review_data")
+                reviews["username"] = reviews["review_data"].apply(
+                        lambda x: x["UserNickname"]
+                    )
+                reviews["rating"] = reviews["review_data"].apply(
+                        lambda x: x["Rating"]
+                    )
+                grouped_reviews = reviews.groupby("username")["review_data"].apply(
+                        list
+                    )
+                multiple_rating_users = [""] + list(
+                    set(grouped_reviews[grouped_reviews.map(len) > 1].index)
+                )
+                username = st.selectbox(
+                    "Please select your username from dropdown",
+                    sorted(multiple_rating_users),
+                )
+                fields_to_csv["username"] = username
+                user_not_in_list = st.checkbox(
+                    "Please check here if your username is not in this list",
+                    key="user_not_in_list",
+                )
+                if user_not_in_list:
+                    user_has_sephora = False
                 for cat, products in top_3.items():
                     products = (
                         (
@@ -152,32 +176,21 @@ def svd(df, product_categories, fields_to_csv):
                         15,
                         df,
                     )
-                    reviews = cbf.explode("review_data")
-                    reviews["username"] = reviews["review_data"].apply(
-                        lambda x: x["UserNickname"]
+                    reviews_cbf = cbf.explode("review_data")
+                    reviews_cbf["username"] = reviews_cbf["review_data"].apply(
+                            lambda x: x["UserNickname"]
+                        )
+                    reviews_cbf["rating"] = reviews_cbf["review_data"].apply(
+                            lambda x: x["Rating"]
+                        )
+                    grouped_reviews_cbf = reviews_cbf.groupby("username")["review_data"].apply(
+                            list
+                        )
+                    multiple_rating_users_cbf = [""] + list(
+                        set(grouped_reviews_cbf[grouped_reviews_cbf.map(len) > 1].index)
                     )
-                    reviews["rating"] = reviews["review_data"].apply(
-                        lambda x: x["Rating"]
-                    )
-                    grouped_reviews = reviews.groupby("username")["review_data"].apply(
-                        list
-                    )
-                    multiple_rating_users = [""] + list(
-                        set(grouped_reviews[grouped_reviews.map(len) > 1].index)
-                    )
-                    username = st.selectbox(
-                        "3b. Please select your username from dropdown",
-                        sorted(multiple_rating_users),
-                    )
-                    user_not_in_list = st.checkbox(
-                        "Please check here if your username is not in this list",
-                        key=f"user_not_in_list_{cat}",
-                    )
-                    if user_not_in_list:
-                        user_has_sephora = False
-                    elif username != "":
-                        fields_to_csv["username"] = username
-                        st.write(f"{cat}")
+                    if username in multiple_rating_users_cbf:
+                        st.write(f"Here are your {cat} recommendations:")
                         cf = collab_recommender(cbf, 5, username)
                         fields_to_csv[f"recs_{cat}"] = cf[["product_name"]].to_json()
                         disp = cf[["brand", "product_name", "url"]]
@@ -187,12 +200,22 @@ def svd(df, product_categories, fields_to_csv):
                         )
                         st.write(disp, unsafe_allow_html=True)
                         follow_up_questions(cf, cat, fields_to_csv)
-
+                    else:
+                        st.write(f"Here are your {cat} recommendations:")
+                        fields_to_csv[f"recs_{cat}"] = cbf[["product_name"]].to_json()
+                        disp = cbf[["brand", "product_name", "url"]].head(5)
+                        disp["url"] = disp["url"].apply(make_clickable)
+                        disp = disp[["brand", "product_name", "url"]].to_html(
+                            escape=False
+                        )
+                        st.write(disp, unsafe_allow_html=True)
+                        follow_up_questions(cbf.head(5), cat, fields_to_csv)
+                        
             if not user_has_sephora or not multiple_reviews:  # if no sephora acc
                 fields_to_csv["user_has_sephora"] = user_has_sephora
-                st.write("Here are your recommendations:")
                 print(top_3)
                 for cat, products in top_3.items():
+                    st.write(f"Here are your {cat} recommendations:")
                     products = (
                         (
                             *products,
@@ -214,16 +237,16 @@ def svd(df, product_categories, fields_to_csv):
                     disp["url"] = disp["url"].apply(make_clickable)
                     disp = disp[["brand", "product_name", "url"]].to_html(escape=False)
                     st.write(disp, unsafe_allow_html=True)
-                    follow_up_questions(cbf, cat, fields_to_csv)
+                    follow_up_questions(cbf.head(5), cat, fields_to_csv)
 
             reccommend = st.slider(
-                "7. How likely would you recommend this recommender to someone else? (1 = not at all likely, 10 = extremely likely)",
+                "How likely would you recommend this recommender to someone else? (1 = not at all likely, 10 = extremely likely)",
                 min_value=0,
                 max_value=10,
                 value=1,
             )
             fields_to_csv["nps_score"] = reccommend
-            nps_reason = st.text_input("8. Please explain why you gave that score.")
+            nps_reason = st.text_input("Please explain why you gave that score.")
             fields_to_csv["nps_reason"] = nps_reason
             return nps_reason != ""
 
@@ -313,7 +336,7 @@ def ml(df, product_categories, fields):
             have_tried_ml = st.radio(
                 "Have you tried any of these products?",
                 options=["Yes", "No"],
-                key=f"{cat}_tried",
+                key=f"{cat}_tried_ml",
             )
             fields[f"{cat}_tried_ml"] = have_tried_ml
             if have_tried_ml == "Yes":
@@ -327,26 +350,24 @@ def ml(df, product_categories, fields):
                     if tried_products_ml_bool[i]:
                         tried_products_ml.append(item)
                 fields[f"{cat}_tried_products_ml"] = tried_products_ml
+            else:
+                tried_products_ml = []
             willing_ml = st.radio(
                 "Would you be willing to try any of these products?",
-                key=f"{cat}_willing",
+                key=f"{cat}_willing_ml",
                 options=["Yes", "No"],
             )
             fields[f"{cat}_willing_ml"] = willing_ml
             if willing_ml == "Yes":
                 willing_products_temp_ml = []
-                if have_tried_ml == "Yes":
-                    for _, item in df_tmp.iterrows():
-                        if item.product_name not in tried_products_ml:
-                            willing_products_temp_ml.append(item.product_name)
+                for _, item in df_tmp.iterrows():
+                    if item.product_name not in tried_products_ml:
+                        willing_products_temp_ml.append(item.product_name)
                 willing_products_ml_bool = [
                     st.checkbox(item, key=f"{item}_willing_ml")
                     for item in willing_products_temp_ml
                 ]
-                willing_products_ml = []
-                for i, item in enumerate(df_tmp.iterrows()):
-                    if willing_products_ml_bool[i]:
-                        willing_products_ml.append(item)
+                willing_products_ml = [ item for i, item in enumerate(willing_products_temp_ml) if willing_products_ml_bool[i] ]
                 fields[f"{cat}_willing_products_ml"] = willing_products_ml
 
         reccommend_ml = st.slider(
@@ -412,11 +433,9 @@ st.caption(
 )
 if st.session_state.k < 0.5:
     if svd(df, product_categories, fields_to_csv):
-        st.write("Fields to csv", fields_to_csv)
         st.write("Thank you for completing part 1 :)")
         st.write("Part 2 is a different recommender.")
         if ml(df, product_categories, fields_to_csv):
-            st.write("Fields to csv", fields_to_csv)
             st.write("Thank you for completing part 2 :)")
             st.write("Part 3 contains questions comparing part 1 and part 2.")
             user_pref = st.radio(
@@ -447,11 +466,9 @@ if st.session_state.k < 0.5:
 
 else:
     if ml(df, product_categories, fields_to_csv):
-        st.write("Fields to csv", fields_to_csv)
         st.write("Thank you for completing part 1 :)")
         st.write("Part 2 is a different recommender.")
         if svd(df, product_categories, fields_to_csv):
-            st.write("Fields to csv", fields_to_csv)
             st.write("Thank you for completing part 2 :)")
             st.write("Part 3 contains questions comparing part 1 and part 2.")
             user_pref = st.radio(

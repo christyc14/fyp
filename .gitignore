@@ -136,3 +136,4 @@ dmypy.json
 client_secret.json
 sephora_scraped_data.csv
 .streamlit/secrets.toml
+data.pkl
