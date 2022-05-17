@@ -62,7 +62,7 @@ def content_recommender(opt, _item1, _item2, _item3, num_recs, df):
         )
     content_df = content_df[~content_df.product_name.isin([_item1, _item2, _item3])]
     content_df = content_df.sort_values("dist")
-    return content_df.head(num_recs)
+    return content_df
 
 
 def collab_recommender(df_tmp, num_recs, username):
@@ -86,6 +86,7 @@ def collab_recommender(df_tmp, num_recs, username):
 
     ss = StandardScaler()
     normatrix = ss.fit_transform(matrix)
+    print(normatrix)
     U, S, V = svds(normatrix)
     all_user_predicted_rating = ss.inverse_transform(U @ np.diag(S) @ V)
 

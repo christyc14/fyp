@@ -3,6 +3,7 @@ cbscraper/product_urls_with_reviews_2.jsonlines
 cbscraper/product_urls_with_reviews_3.jsonlines
 big_data.jsonlines
 src/agModels-predictClass/*
+fyp-proj-350515-21a749819605.json
 # Byte-compiled / optimized / DLL files
 __pycache__/
 *.py[cod]
@@ -132,3 +133,5 @@ dmypy.json
 
 # Pyre type checker
 .pyre/
+client_secret.json
+sephora_scraped_data.csv
