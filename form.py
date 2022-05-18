@@ -1,6 +1,7 @@
 from __future__ import print_function
 from dataclasses import fields
 from functools import partial
+from pathlib import Path
 import random
 from tempfile import NamedTemporaryFile
 import streamlit as st
@@ -52,6 +53,21 @@ def load_data() -> pd.DataFrame:
         blob.download_to_filename(f.name)
         return pd.read_pickle(f.name)
 
+@st.experimental_memo
+def load_model() -> TabularPredictor:
+    storage_client = storage.Client.from_service_account_info(
+        st.secrets["gcp_service_account"]
+    )
+    bucket = storage_client.bucket("sephora_scraped_data")
+    blobs = bucket.list_blobs(prefix="agModels-predictClass") 
+    for blob in blobs:
+        if blob.name.endswith("/"):
+            continue
+        file_split = blob.name.split("/")
+        directory = "/".join(file_split[0:-1])
+        Path(directory).mkdir(parents=True, exist_ok=True)
+        blob.download_to_filename(blob.name) 
+        return TabularPredictor.load('agModels-predictClass/')
 
 df: pd.DataFrame = load_data()
 product_categories: List[str] = list(set(df.category.values))
@@ -252,7 +268,7 @@ def svd(df, product_categories, fields_to_csv):
 
 
 def ml(df, product_categories, fields):
-    ml_pred = TabularPredictor.load("src/agModels-predictClass/")
+    ml_pred = load_model()
     # ask questions
     st.write("Which categories would you like recommendations for?")
     checkboxes_ml = [

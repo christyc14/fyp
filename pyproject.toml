@@ -25,6 +25,7 @@ pygsheets = "^2.0.5"
 google-cloud = "^0.34.0"
 google-auth-httplib2 = "^0.1.0"
 google-cloud-storage = "^2.3.0"
+memory-profiler = "^0.60.0"
 
 
 [tool.poetry.dev-dependencies]
