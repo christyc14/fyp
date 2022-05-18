@@ -20,6 +20,5 @@ COPY . /app
 #Change Working Directory to app directory
 WORKDIR /app
 
-#Run the application on port 8080
-ENTRYPOINT ["streamlit", "run", "form.py", "--server.port=8080", "--server.address=0.0.0.0"]
+ENTRYPOINT ["streamlit", "run", "form.py", "--server.port=$PORT", "--server.address=0.0.0.0"]
 

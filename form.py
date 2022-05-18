@@ -44,9 +44,7 @@ def make_clickable(link):
 
 @st.experimental_memo
 def load_data() -> pd.DataFrame:
-    storage_client = storage.Client.from_service_account_info(
-        st.secrets["gcp_service_account"]
-    )
+    storage_client = storage.Client()
     bucket = storage_client.bucket("sephora_scraped_data")
     blob = bucket.blob("data.pkl")
     with NamedTemporaryFile() as f:
@@ -55,9 +53,7 @@ def load_data() -> pd.DataFrame:
 
 @st.experimental_memo
 def load_model() -> TabularPredictor:
-    storage_client = storage.Client.from_service_account_info(
-        st.secrets["gcp_service_account"]
-    )
+    storage_client = storage.Client()
     bucket = storage_client.bucket("sephora_scraped_data")
     blobs = bucket.list_blobs(prefix="agModels-predictClass") 
     for blob in blobs:
