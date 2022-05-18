@@ -1,5 +1,5 @@
 from __future__ import print_function
-from dataclasses import fields
+
 from functools import partial
 from pathlib import Path
 import random
@@ -9,7 +9,7 @@ import os
 import pandas as pd
 import numpy as np
 from calendar import c
-from typing import Dict, List, Union
+from typing import Dict, List
 from zlib import DEF_BUF_SIZE
 import json
 import smtplib

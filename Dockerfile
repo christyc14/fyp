@@ -1,25 +1,22 @@
-
-#Base Image to use
 FROM python:3.8-slim
+RUN rm /bin/sh && ln -s /bin/bash /bin/sh
+EXPOSE $PORT
 
-#Expose port 8080
-EXPOSE 8080
+RUN apt-get update
+RUN apt-get -y install curl
 
-#Optional - install git to fetch packages directly from github
-RUN apt-get update && apt-get install -y git
-
-#Copy Requirements.txt file into app directory
-COPY requirements.txt app/requirements.txt
-
-#install all requirements in requirements.txt
 RUN curl https://sh.rustup.rs -sSf | sh -s -- -y
+RUN source $HOME/.cargo/env
 
-RUN python3 -m pip install -r app/requirements.txt
 
-#Copy all files in current directory into app directory
+RUN mkdir /app
 COPY . /app
-
-#Change Working Directory to app directory
 WORKDIR /app
+
+ENV PYTHONPATH=${PYTHONPATH}:${PWD}
+
+RUN pip3 install poetry==1.1.13
+RUN poetry config virtualenvs.create false
+RUN poetry install --no-dev
 
 ENTRYPOINT ["streamlit", "run", "form.py", "--server.port=$PORT", "--server.address=0.0.0.0"]
