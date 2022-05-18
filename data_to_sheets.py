@@ -1,3 +1,4 @@
+from typing import List
 from functools import partial
 import json
 import os
@@ -9,6 +10,13 @@ import pygsheets
 script_dir = os.path.dirname(__file__)
 rel_path = "cbscraper/big_data.jsonlines"
 data_path = os.path.join(script_dir, rel_path)
+
+def human_readable(num, suffix="B"):
+    for unit in ["", "Ki", "Mi", "Gi", "Ti", "Pi", "Ei", "Zi"]:
+        if abs(num) < 1024.0:
+            return f"{num:3.1f}{unit}{suffix}"
+        num /= 1024.0
+    return f"{num:.1f}Yi{suffix}"
 
 
 def load_data() -> pd.DataFrame:
@@ -31,11 +39,9 @@ def load_data() -> pd.DataFrame:
 
     return df
 
-
-from google.cloud import storage
-
 df = load_data()
 
+from google.cloud import storage
 
 def upload_blob(bucket_name, source_file_name, destination_blob_name):
     """Uploads a file to the bucket."""
@@ -53,6 +59,11 @@ def upload_blob(bucket_name, source_file_name, destination_blob_name):
     blob.upload_from_filename(source_file_name, timeout=1000)
 
     print(f"File {source_file_name} uploaded to {destination_blob_name}.")
+
+print(df)
+df['avg_rating'] = df['avg_rating'].astype('float16')
+df['category'] = df['category'].astype('category')
+df = df.drop(['num_loves','num_reviews','brand'], axis = 1)
 
 df.to_pickle('data.pkl')
 
