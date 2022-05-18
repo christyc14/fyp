@@ -14,6 +14,7 @@ COPY requirements.txt app/requirements.txt
 #install all requirements in requirements.txt
 RUN python3 -m pip install -r app/requirements.txt
 
+RUN curl https://sh.rustup.rs -sSf | sh -s -- -y
 #Copy all files in current directory into app directory
 COPY . /app
 
