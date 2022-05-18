@@ -67,6 +67,7 @@ def load_model() -> TabularPredictor:
         directory = "/".join(file_split[0:-1])
         Path(directory).mkdir(parents=True, exist_ok=True)
         blob.download_to_filename(blob.name) 
+        return TabularPredictor.load('agModels-predictClass/')
 
 df: pd.DataFrame = load_data()
 product_categories: List[str] = list(set(df.category.values))
