@@ -1,6 +1,6 @@
 FROM python:3.8-slim
 RUN rm /bin/sh && ln -s /bin/bash /bin/sh
-EXPOSE $PORT
+# EXPOSE $PORT
 
 RUN apt-get update
 RUN apt-get -y install curl
@@ -19,4 +19,5 @@ RUN pip3 install poetry==1.1.13
 RUN poetry config virtualenvs.create false
 RUN poetry install --no-dev
 
-ENTRYPOINT ["streamlit", "run", "form.py", "--server.port=$PORT", "--server.address=0.0.0.0"]
+CMD streamlit run form.py --server.port=${PORT}  --browser.serverAddress="0.0.0.0"
+
