@@ -205,9 +205,9 @@ def svd(df, product_categories, fields_to_csv):
                         st.write(f"Here are your {cat} recommendations:")
                         cf = collab_recommender(cbf, 5, username)
                         fields_to_csv[f"recs_{cat}"] = cf[["product_name"]].to_json()
-                        disp = cf[["brand", "product_name", "url"]]
+                        disp = cf[["product_name", "url"]]
                         disp["url"] = disp["url"].apply(make_clickable)
-                        disp = disp[["brand", "product_name", "url"]].to_html(
+                        disp = disp[["product_name", "url"]].to_html(
                             escape=False
                         )
                         st.write(disp, unsafe_allow_html=True)
@@ -215,9 +215,9 @@ def svd(df, product_categories, fields_to_csv):
                     else:
                         st.write(f"Here are your {cat} recommendations:")
                         fields_to_csv[f"recs_{cat}"] = cbf[["product_name"]].to_json()
-                        disp = cbf[["brand", "product_name", "url"]].head(5)
+                        disp = cbf[["product_name", "url"]].head(5)
                         disp["url"] = disp["url"].apply(make_clickable)
-                        disp = disp[["brand", "product_name", "url"]].to_html(
+                        disp = disp[["product_name", "url"]].to_html(
                             escape=False
                         )
                         st.write(disp, unsafe_allow_html=True)
@@ -244,10 +244,10 @@ def svd(df, product_categories, fields_to_csv):
                         df,
                     ).head(5)
                     # link is the column with hyperlinks
-                    disp = cbf[["brand", "product_name", "url"]]
+                    disp = cbf[["product_name", "url"]]
                     fields_to_csv[f"recs_{cat}"] = disp.to_json()
                     disp["url"] = disp["url"].apply(make_clickable)
-                    disp = disp[["brand", "product_name", "url"]].to_html(escape=False)
+                    disp = disp[["product_name", "url"]].to_html(escape=False)
                     st.write(disp, unsafe_allow_html=True)
                     follow_up_questions(cbf.head(5), cat, fields_to_csv)
 
@@ -339,11 +339,11 @@ def ml(df, product_categories, fields):
             df_tmp = df_tmp.sort_values(by="pred_rating", ascending=False)
             df_tmp = df_tmp[df_tmp["category"] == cat].head(5)
             fields[f"recs_ml_{cat}"] = df_tmp[
-                ["brand", "product_name", "pred_rating"]
+                ["product_name", "pred_rating"]
             ].to_json()
-            ml_disp = df_tmp[["brand", "product_name", "url"]]
+            ml_disp = df_tmp[["product_name", "url"]]
             ml_disp["url"] = ml_disp["url"].apply(make_clickable)
-            ml_disp = ml_disp[["brand", "product_name", "url"]].to_html(escape=False)
+            ml_disp = ml_disp[["product_name", "url"]].to_html(escape=False)
             st.write(ml_disp, unsafe_allow_html=True, key="ml_recommendations")
             have_tried_ml = st.radio(
                 "Have you tried any of these products?",
