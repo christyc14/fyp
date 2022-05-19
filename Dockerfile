@@ -3,7 +3,7 @@ RUN rm /bin/sh && ln -s /bin/bash /bin/sh
 # EXPOSE $PORT
 
 RUN apt-get update
-RUN apt-get -y install curl
+RUN apt-get -y install curl libgomp1
 
 RUN curl https://sh.rustup.rs -sSf | sh -s -- -y
 RUN source $HOME/.cargo/env
