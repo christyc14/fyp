@@ -142,6 +142,7 @@ def follow_up_questions(cbf, cat, fields_to_csv):
         key=f"{cat}_tried",
     )
     fields_to_csv[f"have_tried_svd_{cat}"] = have_tried
+    print("have_tried", have_tried)
     if have_tried == "Yes":
         st.write("Which of these have you tried?")
         tried_products = [
@@ -159,6 +160,7 @@ def follow_up_questions(cbf, cat, fields_to_csv):
         options=["Yes", "No"],
     )
     fields_to_csv[f"willing_svd_{cat}"] = willing
+    print("willing", willing)
     if willing == "Yes":
         willing_products_temp = cbf["product_name"][~cbf["product_name"].isin(tried_products_svd)]
         willing_products = [
@@ -173,6 +175,7 @@ def svd(df, product_categories, fields_to_csv):
     checkboxes = [st.checkbox(cat, value=False) for cat in product_categories]
     cat_svd = [cat for i, cat in enumerate(product_categories) if checkboxes[i]]
     fields_to_csv["category"] = cat_svd
+    print("cat_svd", cat_svd)
     top_3: Dict[str, List[str]] = {}
     if any(checkboxes):
         st.write("Which are your top 3 products for each category?")
@@ -186,6 +189,7 @@ def svd(df, product_categories, fields_to_csv):
             st.warning("Please select at most 3 products for each category")
         elif all([len(v) > 0 for v in top_3.values()]):
             fields_to_csv["top3"] = top_3
+            print("top_3", top_3)
             user_has_sephora: bool = (
                 st.radio(
                     "Do you have a Sephora (US) account?",
@@ -196,6 +200,7 @@ def svd(df, product_categories, fields_to_csv):
             )
             if user_has_sephora:
                 fields_to_csv[f"user_has_sephora"] = user_has_sephora
+                print(user_has_sephora)
                 multiple_reviews: bool = (
                     st.radio(
                         "Have you written 2 or more reviews?", options=["Yes", "No"]
@@ -204,12 +209,14 @@ def svd(df, product_categories, fields_to_csv):
                 )
             if user_has_sephora and multiple_reviews:
                 fields_to_csv["multiple_reviews"] = multiple_reviews
+                print("multiple_reviews", multiple_reviews)
                 multiple_rating_users = [""] + get_users_with_multiple_reviews(df)
                 username = st.selectbox(
                     "Please select your username from dropdown",
                     sorted(multiple_rating_users),
                 )
                 fields_to_csv["username"] = username
+                print("username", username)
                 user_not_in_list = st.checkbox(
                     "Please check here if your username is not in this list",
                     key="user_not_in_list",
@@ -233,11 +240,13 @@ def svd(df, product_categories, fields_to_csv):
                     fields_to_csv[f"recs_{cat}"] = recommendations[
                         ["product_name"]
                     ].to_json()
+                    print("recommendations", recommendations)
                     display_recommendations(recommendations)
                     follow_up_questions(recommendations, cat, fields_to_csv)
 
             if not user_has_sephora or not multiple_reviews:  # if no sephora acc
                 fields_to_csv["user_has_sephora"] = user_has_sephora
+                print("user_has_sephora", user_has_sephora)
                 for cat, products in top_3.items():
                     st.write(f"Here are your {cat} recommendations:")
                     padded_products = pad_selected_products(products)
@@ -248,6 +257,7 @@ def svd(df, product_categories, fields_to_csv):
                         df,
                     ).head(5)
                     # link is the column with hyperlinks
+                    print("cbf", cbf)
                     fields_to_csv[f"recs_{cat}"] = cbf.to_json()
                     display_recommendations(cbf)
                     follow_up_questions(cbf, cat, fields_to_csv)
@@ -259,8 +269,10 @@ def svd(df, product_categories, fields_to_csv):
                 value=1,
             )
             fields_to_csv["nps_score"] = reccommend
+            print("nps_score", reccommend)
             nps_reason = st.text_input("Please explain why you gave that score.")
             fields_to_csv["nps_reason"] = nps_reason
+            print("nps_reason", nps_reason)
             return nps_reason != ""
 
 
@@ -273,6 +285,7 @@ def ml(df, product_categories, fields):
     ]
     cat_ml = [cat for i, cat in enumerate(product_categories) if checkboxes_ml[i]]
     fields["cat_ml"] = cat_ml
+    print("cat_ml", cat_ml)
     nps_reason_ml = ""
     if any(checkboxes_ml):
         skin_tone = st.selectbox(
@@ -281,6 +294,7 @@ def ml(df, product_categories, fields):
             key="skin_tone",
         )
         fields["skin_tone"] = skin_tone
+        print("skin_tone", skin_tone)
         if skin_tone != "":
             skin_type = st.selectbox(
                 "What is your skin type?",
@@ -288,6 +302,7 @@ def ml(df, product_categories, fields):
                 key="skin_type",
             )
             fields["skin_type"] = skin_type
+            print("skin_type", skin_type)
             if skin_type != "":
                 skin_concern = st.selectbox(
                     "What are your most important skincare concern?",
@@ -295,6 +310,7 @@ def ml(df, product_categories, fields):
                     key="skin_concern",
                 )
                 fields["skin_concern"] = skin_concern
+                print("skin_concern", skin_concern)
         if skin_tone != "" and skin_type != "" and skin_concern != "":
             for cat in cat_ml:
                 ml_df = pd.DataFrame()
@@ -311,6 +327,7 @@ def ml(df, product_categories, fields):
                 fields[f"recs_ml_{cat}"] = ml_df[
                     ["product_name", "pred_rating"]
                 ].to_json()
+                print("ml_df", ml_df["product_name"])
                 display_recommendations(ml_df)
                 have_tried_ml = st.radio(
                     "Have you tried any of these products?",
@@ -318,6 +335,7 @@ def ml(df, product_categories, fields):
                     key=f"{cat}_tried_ml",
                 )
                 fields[f"{cat}_tried_ml"] = have_tried_ml
+                print("have_tried_ml", have_tried_ml)
                 if have_tried_ml == "Yes":
                     st.write("Which of these have you tried?")
                     tried_products_ml_bool = [
@@ -325,6 +343,7 @@ def ml(df, product_categories, fields):
                         for product_name in ml_df["product_name"].values
                     ]
                     tried_products_ml = ml_df["product_name"][tried_products_ml_bool]
+                    print("tried_products_ml", tried_products_ml)
                     fields[f"{cat}_tried_products_ml"] = tried_products_ml
                 else:
                     tried_products_ml = []
@@ -334,6 +353,7 @@ def ml(df, product_categories, fields):
                     options=["Yes", "No"],
                 )
                 fields[f"{cat}_willing_ml"] = willing_ml
+                print("willing_ml", willing_ml)
                 if willing_ml == "Yes":
                     willing_products_temp_ml = ml_df["product_name"][
                         ~ml_df["product_name"].isin(tried_products_ml)
@@ -343,6 +363,7 @@ def ml(df, product_categories, fields):
                         for item in willing_products_temp_ml
                     ]
                     willing_products_ml = willing_products_temp_ml[willing_products_ml_bool]
+                    print("willing_products_ml", willing_products_ml)
                     fields[f"{cat}_willing_products_ml"] = willing_products_ml
 
             reccommend_ml = st.slider(
@@ -353,10 +374,12 @@ def ml(df, product_categories, fields):
                 key="ml_reccommend",
             )
             fields["ml_reccommend"] = reccommend_ml
+            print("ml_reccommend", reccommend_ml)
             nps_reason_ml = st.text_input(
                 "Please explain why you gave that score.", key="ml_nps_reason"
             )
             fields["ml_nps_reason"] = nps_reason_ml
+            print("ml_nps_reason", nps_reason_ml)
     return nps_reason_ml != ""
 
 
@@ -418,22 +441,28 @@ if st.session_state.k < 0.5:
                 options=["Part 1", "Part 2", "Hated both :("],
             )
             fields_to_csv["user_pref"] = user_pref
+            print("user_pref", user_pref)
             if user_pref == "Part 1" or "Part 2":
                 why_user_pref = st.text_input(f"Why did you prefer {user_pref}?")
                 fields_to_csv["why_user_pref"] = why_user_pref
+                print("why_user_pref", why_user_pref)
                 user_consistent = st.radio(
                     "Would you use either of them consistently?", options=["Yes", "No"]
                 )
                 fields_to_csv["user_consistent"] = user_consistent
+                print("user_consistent", user_consistent)
                 if user_consistent == "Yes":
                     user_when = st.text_input("When would you use it?")
                     fields_to_csv["user_when"] = user_when
+                    print("user_when", user_when)
                 else:
                     user_not_use = st.text_input("Why not?")
                     fields_to_csv["user_not_use"] = user_not_use
+                    print("user_not_use", user_not_use)
             else:
                 why_user_pref = st.text_input("Why did you hate both of them?")
                 fields_to_csv["why_user_pref"] = why_user_pref
+                print("why_user_pref", why_user_pref)
             if st.button("Submit"):
                 if st.session_state.email == "":
                     send_email(fields_to_csv)
@@ -451,22 +480,28 @@ else:
                 options=["Part 1", "Part 2", "Hated both :("],
             )
             fields_to_csv["user_pref"] = user_pref
+            print("user_pref", user_pref)
             if user_pref == "Part 1" or "Part 2":
                 why_user_pref = st.text_input(f"Why did you prefer {user_pref}?")
                 fields_to_csv["why_user_pref"] = why_user_pref
+                print("why_user_pref", why_user_pref)
                 user_consistent = st.radio(
                     "Would you use either of them consistently?", options=["Yes", "No"]
                 )
                 fields_to_csv["user_consistent"] = user_consistent
+                print("user_consistent", user_consistent)
                 if user_consistent == "Yes":
                     user_when = st.text_input("When would you use it?")
                     fields_to_csv["user_when"] = user_when
+                    print("user_when", user_when)
                 else:
                     user_not_use = st.text_input("Why not?")
                     fields_to_csv["user_not_use"] = user_not_use
+                    print("user_not_use", user_not_use)
             else:
                 why_user_pref = st.text_input("Why did you hate both of them?")
                 fields_to_csv["why_user_pref"] = why_user_pref
+                print("why_user_pref", why_user_pref)
             if st.button("Submit"):
                 if st.session_state.email == "":
                     send_email(fields_to_csv)
