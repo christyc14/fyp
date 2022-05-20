@@ -32,7 +32,7 @@ def preprocess_ingredients(ingredients):
     return processed_ingredients
 
 
-def content_recommender(opt, _item1, _item2, _item3, num_recs, df):
+def content_recommender(opt, _item1, _item2, _item3, df) -> pd.DataFrame:
     content_df = df[df.category == opt]
     content_df["ingredients"] = content_df["ingredients"].map(preprocess_ingredients)
     mlb = MultiLabelBinarizer()

@@ -9,7 +9,7 @@ import os
 import pandas as pd
 import numpy as np
 from calendar import c
-from typing import Dict, List
+from typing import Dict, List, Tuple
 from zlib import DEF_BUF_SIZE
 import json
 import smtplib
@@ -35,6 +35,38 @@ script_dir = os.path.dirname(__file__)
 rel_path = "cbscraper/big_data.jsonlines"
 data_path = os.path.join(script_dir, rel_path)
 
+SKINCARE_CONCERNS = [
+    "",
+    "acne",
+    "aging",
+    "blackheads",
+    "darkCircles",
+    "dullness",
+    "sensitivity",
+    "redness",
+    "sunDamage",
+    "cellulite",
+    "pores",
+    "unevenSkinTones",
+    "cuticles",
+    "calluses",
+    "stretchMarks",
+    "puffiness",
+]
+
+SKIN_TONES = [
+    "",
+    "porcelain",
+    "fair",
+    "light",
+    "medium",
+    "tan",
+    "olive",
+    "deep",
+    "dark",
+    "ebony",
+]
+
 
 def make_clickable(link):
     # target _blank to open new window
@@ -51,19 +83,52 @@ def load_data() -> pd.DataFrame:
         blob.download_to_filename(f.name)
         return pd.read_pickle(f.name)
 
+
 @st.experimental_memo
 def load_model() -> TabularPredictor:
     storage_client = storage.Client()
     bucket = storage_client.bucket("sephora_scraped_data")
-    blobs = bucket.list_blobs(prefix="agModels-predictClass") 
+    blobs = bucket.list_blobs(prefix="agModels-predictClass")
     for blob in blobs:
         if blob.name.endswith("/"):
             continue
         file_split = blob.name.split("/")
         directory = "/".join(file_split[0:-1])
         Path(directory).mkdir(parents=True, exist_ok=True)
-        blob.download_to_filename(blob.name) 
-    return TabularPredictor.load('agModels-predictClass/')
+        blob.download_to_filename(blob.name)
+    return TabularPredictor.load("agModels-predictClass/")
+
+
+@st.experimental_memo
+def get_users_with_multiple_reviews(df) -> List[str]:
+    reviews = df.explode("review_data")
+    reviews["username"] = reviews["review_data"].apply(lambda x: x["UserNickname"])
+    reviews["rating"] = reviews["review_data"].apply(lambda x: x["Rating"])
+    grouped_reviews = reviews.groupby("username")["review_data"].apply(list)
+    multiple_rating_users = list(
+        set(grouped_reviews[grouped_reviews.map(len) > 1].index)
+    )
+    return multiple_rating_users
+
+
+@st.experimental_memo
+def pad_selected_products(products: Tuple[str, ...]) -> Tuple[str, ...]:
+    return (
+        (
+            *products,
+            *((3 - (len(products))) * (products[len(products) - 1],)),
+        )
+        if len(products) < 3
+        else products
+    )
+
+
+def display_recommendations(df):
+    disp = df[["product_name", "url"]]
+    disp["url"] = disp["url"].apply(make_clickable)
+    disp = disp[["product_name", "url"]].to_html(escape=False)
+    st.write(disp, unsafe_allow_html=True)
+
 
 df: pd.DataFrame = load_data()
 product_categories: List[str] = list(set(df.category.values))
@@ -80,14 +145,10 @@ def follow_up_questions(cbf, cat, fields_to_csv):
     if have_tried == "Yes":
         st.write("Which of these have you tried?")
         tried_products = [
-            st.checkbox(item.product_name, key=f"{cat}_tried_products")
-            for _, item in cbf.iterrows()
+            st.checkbox(product_name, key=f"{cat}_tried_products")
+            for product_name in cbf["product_name"].values
         ]
-        tried_products_svd = [
-            row.product_name
-            for k, (_, row) in enumerate(cbf.iterrows())
-            if tried_products[k]
-        ]
+        tried_products_svd = cbf[tried_products]
         fields_to_csv[f"tried_products_svd_{cat}"] = tried_products_svd
     else:
         tried_products_svd = []
@@ -98,18 +159,11 @@ def follow_up_questions(cbf, cat, fields_to_csv):
     )
     fields_to_csv[f"willing_svd_{cat}"] = willing
     if willing == "Yes":
-        willing_products_temp = []
-        for _, item in cbf.iterrows():
-            if item.product_name not in tried_products_svd:
-                willing_products_temp.append(item.product_name)
+        willing_products_temp = cbf[~cbf["product_name"].isin(tried_products_svd)]
         willing_products = [
             st.checkbox(item, key=f"_{item}") for item in willing_products_temp
         ]
-        will_prod_names = [
-            item
-            for j, item in enumerate(willing_products_temp)
-            if willing_products[j]
-        ]
+        will_prod_names = willing_products_temp[willing_products]
         fields_to_csv[f"will_prod_names_svd_{cat}"] = will_prod_names
 
 
@@ -149,19 +203,7 @@ def svd(df, product_categories, fields_to_csv):
                 )
             if user_has_sephora and multiple_reviews:
                 fields_to_csv["multiple_reviews"] = multiple_reviews
-                reviews = df.explode("review_data")
-                reviews["username"] = reviews["review_data"].apply(
-                        lambda x: x["UserNickname"]
-                    )
-                reviews["rating"] = reviews["review_data"].apply(
-                        lambda x: x["Rating"]
-                    )
-                grouped_reviews = reviews.groupby("username")["review_data"].apply(
-                        list
-                    )
-                multiple_rating_users = [""] + list(
-                    set(grouped_reviews[grouped_reviews.map(len) > 1].index)
-                )
+                multiple_rating_users = [""] + get_users_with_multiple_reviews(df)
                 username = st.selectbox(
                     "Please select your username from dropdown",
                     sorted(multiple_rating_users),
@@ -174,82 +216,40 @@ def svd(df, product_categories, fields_to_csv):
                 if user_not_in_list:
                     user_has_sephora = False
                 for cat, products in top_3.items():
-                    products = (
-                        (
-                            *products,
-                            *((3 - (len(products))) * (products[len(products) - 1],)),
-                        )
-                        if len(products) < 3
-                        else products
-                    )
-                    cbf = content_recommender(
+                    padded_products = pad_selected_products(products)
+                    recommendations = content_recommender(
                         cat,
-                        *(products),
-                        15,
+                        *(padded_products),
                         df,
                     )
-                    reviews_cbf = cbf.explode("review_data")
-                    reviews_cbf["username"] = reviews_cbf["review_data"].apply(
-                            lambda x: x["UserNickname"]
-                        )
-                    reviews_cbf["rating"] = reviews_cbf["review_data"].apply(
-                            lambda x: x["Rating"]
-                        )
-                    grouped_reviews_cbf = reviews_cbf.groupby("username")["review_data"].apply(
-                            list
-                        )
-                    multiple_rating_users_cbf = [""] + list(
-                        set(grouped_reviews_cbf[grouped_reviews_cbf.map(len) > 1].index)
+                    multiple_rating_users_cbf = [""] + get_users_with_multiple_reviews(
+                        cbf
                     )
+                    st.write(f"Here are your {cat} recommendations:")
                     if username in multiple_rating_users_cbf and username != "":
-                        st.write(f"Here are your {cat} recommendations:")
-                        cf = collab_recommender(cbf, 5, username)
-                        fields_to_csv[f"recs_{cat}"] = cf[["product_name"]].to_json()
-                        disp = cf[["product_name", "url"]]
-                        disp["url"] = disp["url"].apply(make_clickable)
-                        disp = disp[["product_name", "url"]].to_html(
-                            escape=False
-                        )
-                        st.write(disp, unsafe_allow_html=True)
-                        follow_up_questions(cf, cat, fields_to_csv)
-                    else:
-                        st.write(f"Here are your {cat} recommendations:")
-                        fields_to_csv[f"recs_{cat}"] = cbf[["product_name"]].to_json()
-                        disp = cbf[["product_name", "url"]].head(5)
-                        disp["url"] = disp["url"].apply(make_clickable)
-                        disp = disp[["product_name", "url"]].to_html(
-                            escape=False
-                        )
-                        st.write(disp, unsafe_allow_html=True)
-                        follow_up_questions(cbf.head(5), cat, fields_to_csv)
-                        
+                        recommendations = collab_recommender(cbf, 5, username)
+                    recommendations = recommendations.head(5)
+                    fields_to_csv[f"recs_{cat}"] = recommendations[
+                        ["product_name"]
+                    ].to_json()
+                    display_recommendations(recommendations)
+                    follow_up_questions(recommendations, cat, fields_to_csv)
+
             if not user_has_sephora or not multiple_reviews:  # if no sephora acc
                 fields_to_csv["user_has_sephora"] = user_has_sephora
-                print(top_3)
                 for cat, products in top_3.items():
                     st.write(f"Here are your {cat} recommendations:")
-                    products = (
-                        (
-                            *products,
-                            *((3 - (len(products))) * (products[len(products) - 1],)),
-                        )
-                        if len(products) < 3
-                        else products
-                    )
+                    padded_products = pad_selected_products(products)
 
                     cbf = content_recommender(
                         cat,
-                        *(products),
-                        5,
+                        *(padded_products),
                         df,
                     ).head(5)
                     # link is the column with hyperlinks
-                    disp = cbf[["product_name", "url"]]
-                    fields_to_csv[f"recs_{cat}"] = disp.to_json()
-                    disp["url"] = disp["url"].apply(make_clickable)
-                    disp = disp[["product_name", "url"]].to_html(escape=False)
-                    st.write(disp, unsafe_allow_html=True)
-                    follow_up_questions(cbf.head(5), cat, fields_to_csv)
+                    fields_to_csv[f"recs_{cat}"] = cbf.to_json()
+                    display_recommendations(cbf)
+                    follow_up_questions(cbf, cat, fields_to_csv)
 
             reccommend = st.slider(
                 "How likely would you recommend this recommender to someone else? (1 = not at all likely, 10 = extremely likely)",
@@ -272,25 +272,11 @@ def ml(df, product_categories, fields):
     ]
     cat_ml = [cat for i, cat in enumerate(product_categories) if checkboxes_ml[i]]
     fields["cat_ml"] = cat_ml
-    skin_tone = "fair"
-    skin_type = "dry"
-    skin_concern = "acne"
     nps_reason_ml = ""
     if any(checkboxes_ml):
         skin_tone = st.selectbox(
             "What is your skin tone?",
-            options=[
-                "",
-                "porcelain",
-                "fair",
-                "light",
-                "medium",
-                "tan",
-                "olive",
-                "deep",
-                "dark",
-                "ebony",
-            ],
+            options=SKIN_TONES,
             key="skin_tone",
         )
         fields["skin_tone"] = skin_tone
@@ -304,96 +290,70 @@ def ml(df, product_categories, fields):
             if skin_type != "":
                 skin_concern = st.selectbox(
                     "What are your most important skincare concern?",
-                    options=[
-                        "",
-                        "acne",
-                        "aging",
-                        "blackheads",
-                        "darkCircles",
-                        "dullness",
-                        "sensitivity",
-                        "redness",
-                        "sunDamage",
-                        "cellulite",
-                        "pores",
-                        "unevenSkinTones",
-                        "cuticles",
-                        "calluses",
-                        "stretchMarks",
-                        "puffiness",
-                    ],
+                    options=SKINCARE_CONCERNS,
                     key="skin_concern",
                 )
                 fields["skin_concern"] = skin_concern
-    if skin_tone != "" and skin_type != "" and skin_concern != "":
-        for cat in cat_ml:
-            ml_df = pd.DataFrame()
-            ml_df["ingredients"] = df["ingredients"]
-            ml_df["category"] = df["category"]
-            ml_df["skin_tone"] = skin_tone
-            ml_df["skin_type"] = skin_type
-            ml_df["skin_concern"] = skin_concern
-            y_pred = ml_pred.predict(ml_df)
-            df_tmp = df.copy()
-            df_tmp["pred_rating"] = y_pred
-            df_tmp = df_tmp.sort_values(by="pred_rating", ascending=False)
-            df_tmp = df_tmp[df_tmp["category"] == cat].head(5)
-            fields[f"recs_ml_{cat}"] = df_tmp[
-                ["product_name", "pred_rating"]
-            ].to_json()
-            ml_disp = df_tmp[["product_name", "url"]]
-            ml_disp["url"] = ml_disp["url"].apply(make_clickable)
-            ml_disp = ml_disp[["product_name", "url"]].to_html(escape=False)
-            st.write(ml_disp, unsafe_allow_html=True, key="ml_recommendations")
-            have_tried_ml = st.radio(
-                "Have you tried any of these products?",
-                options=["Yes", "No"],
-                key=f"{cat}_tried_ml",
-            )
-            fields[f"{cat}_tried_ml"] = have_tried_ml
-            if have_tried_ml == "Yes":
-                st.write("Which of these have you tried?")
-                tried_products_ml_bool = [
-                    st.checkbox(item.product_name, key=f"{cat}_tried_products_ml")
-                    for _, item in df_tmp.iterrows()
-                ]
-                tried_products_ml = []
-                for i, item in enumerate(df_tmp.iterrows()):
-                    if tried_products_ml_bool[i]:
-                        tried_products_ml.append(item)
-                fields[f"{cat}_tried_products_ml"] = tried_products_ml
-            else:
-                tried_products_ml = []
-            willing_ml = st.radio(
-                "Would you be willing to try any of these products?",
-                key=f"{cat}_willing_ml",
-                options=["Yes", "No"],
-            )
-            fields[f"{cat}_willing_ml"] = willing_ml
-            if willing_ml == "Yes":
-                willing_products_temp_ml = []
-                for _, item in df_tmp.iterrows():
-                    if item.product_name not in tried_products_ml:
-                        willing_products_temp_ml.append(item.product_name)
-                willing_products_ml_bool = [
-                    st.checkbox(item, key=f"{item}_willing_ml")
-                    for item in willing_products_temp_ml
-                ]
-                willing_products_ml = [ item for i, item in enumerate(willing_products_temp_ml) if willing_products_ml_bool[i] ]
-                fields[f"{cat}_willing_products_ml"] = willing_products_ml
+        if skin_tone != "" and skin_type != "" and skin_concern != "":
+            for cat in cat_ml:
+                ml_df = pd.DataFrame()
+                ml_df["ingredients"] = df["ingredients"]
+                ml_df["category"] = df["category"]
+                ml_df["skin_tone"] = skin_tone
+                ml_df["skin_type"] = skin_type
+                ml_df["skin_concern"] = skin_concern
+                ml_df["pred_rating"] = ml_pred.predict(ml_df)
+                ml_df = ml_df.sort_values(by="pred_rating", ascending=False)
+                ml_df = ml_df[ml_df["category"] == cat].head(5)
+                fields[f"recs_ml_{cat}"] = ml_df[
+                    ["product_name", "pred_rating"]
+                ].to_json()
+                display_recommendations(ml_df)
+                have_tried_ml = st.radio(
+                    "Have you tried any of these products?",
+                    options=["Yes", "No"],
+                    key=f"{cat}_tried_ml",
+                )
+                fields[f"{cat}_tried_ml"] = have_tried_ml
+                if have_tried_ml == "Yes":
+                    st.write("Which of these have you tried?")
+                    tried_products_ml_bool = [
+                        st.checkbox(product_name, key=f"{cat}_tried_products_ml")
+                        for product_name in ml_df["product_name"].values
+                    ]
+                    tried_products_ml = ml_df[tried_products_ml_bool]
+                    fields[f"{cat}_tried_products_ml"] = tried_products_ml
+                else:
+                    tried_products_ml = []
+                willing_ml = st.radio(
+                    "Would you be willing to try any of these products?",
+                    key=f"{cat}_willing_ml",
+                    options=["Yes", "No"],
+                )
+                fields[f"{cat}_willing_ml"] = willing_ml
+                if willing_ml == "Yes":
+                    willing_products_temp_ml = ml_df[
+                        ~ml_df["product_name"].isin(tried_products_ml)
+                    ]
+                    willing_products_ml_bool = [
+                        st.checkbox(item, key=f"{item}_willing_ml")
+                        for item in willing_products_temp_ml
+                    ]
+                    willing_products_ml = willing_products_temp_ml[willing_products_ml_bool]
+                    fields[f"{cat}_willing_products_ml"] = willing_products_ml
 
-        reccommend_ml = st.slider(
-            "How likely would you recommend this recommender to someone else? (1 = not at all likely, 10 = extremely likely)",
-            min_value=0,
-            max_value=10,
-            value=1,
-            key="ml_reccommend",
-        )
-        fields["ml_reccommend"] = reccommend_ml
-        nps_reason_ml = st.text_input(
-            "Please explain why you gave that score.", key="ml_nps_reason"
-        )
-        fields["ml_nps_reason"] = nps_reason_ml
+            reccommend_ml = st.slider(
+                "How likely would you recommend this recommender to someone else? (1 = not at all likely, 10 = extremely likely)",
+                min_value=0,
+                max_value=10,
+                value=1,
+                key="ml_reccommend",
+            )
+            fields["ml_reccommend"] = reccommend_ml
+            nps_reason_ml = st.text_input(
+                "Please explain why you gave that score.", key="ml_nps_reason"
+            )
+            fields["ml_nps_reason"] = nps_reason_ml
     return nps_reason_ml != ""
 
 
