@@ -201,7 +201,7 @@ def svd(df, product_categories, fields_to_csv):
                     multiple_rating_users_cbf = [""] + list(
                         set(grouped_reviews_cbf[grouped_reviews_cbf.map(len) > 1].index)
                     )
-                    if username in multiple_rating_users_cbf:
+                    if username in multiple_rating_users_cbf and username != "":
                         st.write(f"Here are your {cat} recommendations:")
                         cf = collab_recommender(cbf, 5, username)
                         fields_to_csv[f"recs_{cat}"] = cf[["product_name"]].to_json()
