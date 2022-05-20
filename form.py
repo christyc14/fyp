@@ -149,6 +149,7 @@ def follow_up_questions(cbf, cat, fields_to_csv):
             for product_name in cbf["product_name"].values
         ]
         tried_products_svd = cbf[tried_products]
+        print("tried_productssvd", tried_products_svd)
         fields_to_csv[f"tried_products_svd_{cat}"] = tried_products_svd
     else:
         tried_products_svd = []
@@ -159,7 +160,7 @@ def follow_up_questions(cbf, cat, fields_to_csv):
     )
     fields_to_csv[f"willing_svd_{cat}"] = willing
     if willing == "Yes":
-        willing_products_temp = cbf[~cbf["product_name"].isin(tried_products_svd)]
+        willing_products_temp = cbf["product_name"][~cbf["product_name"].isin(tried_products_svd)]
         willing_products = [
             st.checkbox(item, key=f"_{item}") for item in willing_products_temp
         ]
@@ -223,7 +224,7 @@ def svd(df, product_categories, fields_to_csv):
                         df,
                     )
                     multiple_rating_users_cbf = [""] + get_users_with_multiple_reviews(
-                        cbf
+                        recommendations
                     )
                     st.write(f"Here are your {cat} recommendations:")
                     if username in multiple_rating_users_cbf and username != "":
@@ -302,7 +303,9 @@ def ml(df, product_categories, fields):
                 ml_df["skin_tone"] = skin_tone
                 ml_df["skin_type"] = skin_type
                 ml_df["skin_concern"] = skin_concern
-                ml_df["pred_rating"] = ml_pred.predict(ml_df)
+                ml_df["product_name"] = df["product_name"]
+                ml_df["url"] = df["url"]
+                ml_df["pred_rating"] = ml_pred.predict(ml_df.drop(["product_name", "url"], axis=1))
                 ml_df = ml_df.sort_values(by="pred_rating", ascending=False)
                 ml_df = ml_df[ml_df["category"] == cat].head(5)
                 fields[f"recs_ml_{cat}"] = ml_df[
@@ -321,7 +324,7 @@ def ml(df, product_categories, fields):
                         st.checkbox(product_name, key=f"{cat}_tried_products_ml")
                         for product_name in ml_df["product_name"].values
                     ]
-                    tried_products_ml = ml_df[tried_products_ml_bool]
+                    tried_products_ml = ml_df["product_name"][tried_products_ml_bool]
                     fields[f"{cat}_tried_products_ml"] = tried_products_ml
                 else:
                     tried_products_ml = []
@@ -332,7 +335,7 @@ def ml(df, product_categories, fields):
                 )
                 fields[f"{cat}_willing_ml"] = willing_ml
                 if willing_ml == "Yes":
-                    willing_products_temp_ml = ml_df[
+                    willing_products_temp_ml = ml_df["product_name"][
                         ~ml_df["product_name"].isin(tried_products_ml)
                     ]
                     willing_products_ml_bool = [
