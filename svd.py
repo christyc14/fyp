@@ -12,6 +12,7 @@ import json
 from scipy.sparse.linalg import svds
 from scipy.spatial import distance
 import os
+import streamlit as st
 
 
 def preprocess_ingredients(ingredients):
@@ -32,6 +33,7 @@ def preprocess_ingredients(ingredients):
     return processed_ingredients
 
 
+@st.experimental_memo
 def content_recommender(opt, _item1, _item2, _item3, df) -> pd.DataFrame:
     content_df = df[df.category == opt]
     content_df["ingredients"] = content_df["ingredients"].map(preprocess_ingredients)
@@ -65,6 +67,7 @@ def content_recommender(opt, _item1, _item2, _item3, df) -> pd.DataFrame:
     return content_df
 
 
+@st.experimental_memo
 def collab_recommender(df_tmp, num_recs, username):
     reviews = df_tmp.explode("review_data")
     reviews["username"] = reviews["review_data"].apply(lambda x: x["UserNickname"])
