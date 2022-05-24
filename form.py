@@ -1,36 +1,25 @@
 from __future__ import print_function
 from dataclasses import dataclass
+from dataclasses_json import dataclass_json
 
-from functools import partial
-from pathlib import Path
-import random
-from tempfile import NamedTemporaryFile
 import streamlit as st
 import os
 import pandas as pd
-import numpy as np
-from calendar import c
-from typing import Dict, List, Tuple
-from zlib import DEF_BUF_SIZE
-import json
-import smtplib
-from sklearn.preprocessing import MultiLabelBinarizer
-from sklearn.manifold import TSNE
-from sklearn.preprocessing import StandardScaler
-from scipy.sparse.linalg import svds
-from scipy.spatial import distance
-from autogluon.tabular import TabularPredictor
-from email.mime.multipart import MIMEMultipart
-from email.mime.text import MIMEText
-from datetime import datetime
-import base64
-import time
+from typing import Dict, List
 import sib_api_v3_sdk
 from sib_api_v3_sdk.rest import ApiException
 from pprint import pprint
-from google.cloud import storage
+from loaders import load_data, load_model
 from svd import content_recommender
 from svd import collab_recommender
+from autogluon.tabular import TabularPredictor
+
+from utils import (
+    build_ml_predictor_input,
+    display_recommendations,
+    get_users_with_multiple_reviews,
+    pad_selected_products,
+)
 
 script_dir = os.path.dirname(__file__)
 rel_path = "cbscraper/big_data.jsonlines"
@@ -68,101 +57,83 @@ SKIN_TONES = [
     "ebony",
 ]
 
-
-def make_clickable(link):
-    # target _blank to open new window
-    # extract clickable text to display for your link
-    return f'<a target="_blank" href="{link}">Sephora US Link</a>'
+Stage = str
+Category = str
 
 
-@st.experimental_memo
-def load_data() -> pd.DataFrame:
-    storage_client = storage.Client()
-    bucket = storage_client.bucket("sephora_scraped_data")
-    blob = bucket.blob("data.pkl")
-    with NamedTemporaryFile() as f:
-        blob.download_to_filename(f.name)
-        return pd.read_pickle(f.name)
+@dataclass
+class SkinInfo:
+    skin_tone: str
+    skin_type: str
+    skin_concern: str
 
 
-@st.experimental_memo
-def load_model() -> TabularPredictor:
-    storage_client = storage.Client()
-    bucket = storage_client.bucket("sephora_scraped_data")
-    blobs = bucket.list_blobs(prefix="agModels-predictClass")
-    for blob in blobs:
-        if blob.name.endswith("/"):
-            continue
-        file_split = blob.name.split("/")
-        directory = "/".join(file_split[0:-1])
-        Path(directory).mkdir(parents=True, exist_ok=True)
-        blob.download_to_filename(blob.name)
-    return TabularPredictor.load("agModels-predictClass/")
+@dataclass
+class ML_input:
+    categories: List[str]
+    skin_info: SkinInfo
 
 
-@st.experimental_memo
-def get_users_with_multiple_reviews(df) -> List[str]:
-    reviews = df.explode("review_data")
-    reviews["username"] = reviews["review_data"].apply(lambda x: x["UserNickname"])
-    reviews["rating"] = reviews["review_data"].apply(lambda x: x["Rating"])
-    grouped_reviews = reviews.groupby("username")["review_data"].apply(list)
-    multiple_rating_users = list(
-        set(grouped_reviews[grouped_reviews.map(len) > 1].index)
-    )
-    return [""] + multiple_rating_users
+@dataclass
+class FollowUpQuestionData:
+    tried_products: List[str]
+    willing: bool
 
 
-@st.experimental_memo
-def pad_selected_products(products: Tuple[str, ...]) -> Tuple[str, ...]:
-    return (
-        (
-            *products,
-            *((3 - (len(products))) * (products[len(products) - 1],)),
-        )
-        if len(products) < 3
-        else products
-    )
+@dataclass
+class SephoraInfo:
+    sephora_username: str
+    user_has_sephora: bool
+    sephora_not_in_list: bool
 
 
-def display_recommendations(df):
-    disp = df[["product_name", "url"]]
-    disp["url"] = disp["url"].apply(make_clickable)
-    disp = disp[["product_name", "url"]].to_html(escape=False)
-    st.write(disp, unsafe_allow_html=True)
+@dataclass
+class NPSScore:
+    score: int
+    comment: str
+
+
+@dataclass_json
+@dataclass
+class FormData:
+    top_3: Dict[str, List[str]]
+    recommendations: Dict[Stage, Dict[Category, List[str]]]
+    sephora_info: SephoraInfo
+    ml_input: ML_input
+    follow_up_questions: Dict[Stage, Dict[Category, FollowUpQuestionData]]
+    nps_scores: Dict[Stage, NPSScore]
 
 
 df: pd.DataFrame = load_data()
-predictor = load_model()
-product_categories: List[str] = list(set(df.category.values))
-fields_to_csv = {}
+predictor: TabularPredictor = load_model()
+product_categories: List[str] = list(set(df["category"].values))
+
+if "form_data" not in st.session_state:
+    st.session_state.form_data = FormData(
+        {},
+        {"ML": {}, "SVD": {}},
+        SephoraInfo(None, None, None),
+        ML_input([], SkinInfo(None, None, None)),
+        {"ML": {}, "SVD": {}},
+        {},
+    )
 
 
-def follow_up_questions(cbf, cat, fields_to_csv):
+def follow_up_questions(stage: Stage, df: pd.DataFrame, category: Category):
     st.write("Have you already tried any of these products? If so, please select them.")
     tried_products = [
-        st.checkbox(product_name, key=f"{cat}_tried_products")
-        for product_name in cbf["product_name"].values
+        st.checkbox(product_name, key=f"{stage}_{category}_tried_products")
+        for product_name in df["product_name"].values
     ]
-    tried_products_svd = cbf["product_name"][tried_products]
-    print("tried_productssvd", tried_products_svd)
-    fields_to_csv[f"tried_products_svd_{cat}"] = tried_products_svd
     willing = st.radio(
         "Would you be willing to try any of these products?",
-        key=f"{cat}_willing",
+        key=f"{stage}_{category}_willing",
         options=["Yes", "No"],
         index=1,
     )
-    fields_to_csv[f"willing_svd_{cat}"] = willing
-    print("willing", willing)
-    if willing == "Yes":
-        willing_products_temp = cbf["product_name"][
-            ~cbf["product_name"].isin(tried_products_svd)
-        ]
-        willing_products = [
-            st.checkbox(item, key=f"_{item}") for item in willing_products_temp
-        ]
-        will_prod_names = willing_products_temp[willing_products]
-        fields_to_csv[f"will_prod_names_svd_{cat}"] = will_prod_names
+    st.session_state.form_data.follow_up_questions[stage][
+        category
+    ] = FollowUpQuestionData(df["product_name"][tried_products].tolist(), willing)
 
 
 def category_selection(_):
@@ -171,7 +142,7 @@ def category_selection(_):
     selected_categories = [
         cat for i, cat in enumerate(product_categories) if checkboxes[i]
     ]
-    fields_to_csv["category"] = selected_categories
+    st.session_state.form_data.ml_input.categories = selected_categories
     return selected_categories
 
 
@@ -190,11 +161,11 @@ def top3_product_selection(selected_categories):
             category,
             df[df.category == category]["product_name"].values,
         )
+    st.session_state.form_data.top_3 = top_3
     return top_3
 
 
 def validate_top3_product_selection(top_3) -> bool:
-    print("hello1")
     if any([len(v) > 3 for v in top_3.values()]):
         st.error("Please select at most 3 products for each category")
         return False
@@ -205,7 +176,7 @@ def validate_top3_product_selection(top_3) -> bool:
 
 
 def user_has_sephora(_):
-    st.session_state.user_has_sephora = (
+    st.session_state.form_data.sephora_info.user_has_sephora = (
         st.radio(
             "Do you have a Sephora (US) account?",
             options=["Yes", "No"],
@@ -213,15 +184,15 @@ def user_has_sephora(_):
         )
         == "Yes"
     )
-    return st.session_state.user_has_sephora
+    return st.session_state.form_data.sephora_info.user_has_sephora
 
 
 def sephora_info(_):
-    st.session_state.sephora_username = st.selectbox(
+    st.session_state.form_data.sephora_info.sephora_username = st.selectbox(
         "Please select your username from dropdown",
         sorted(get_users_with_multiple_reviews(df)),
     )
-    st.session_state.sephora_not_in_list = st.checkbox(
+    st.session_state.form_data.sephora_info.sephora_not_in_list = st.checkbox(
         "Please check here if your username is not in this list",
         key="user_not_in_list",
     )
@@ -239,6 +210,9 @@ if "svd_stage_counter" not in st.session_state:
 
 if "svd_stage_input" not in st.session_state:
     st.session_state.svd_stage_input = None
+
+if "selected_categories" not in st.session_state:
+    st.session_state.selected_categories = []
 
 
 def svd():
@@ -271,8 +245,8 @@ def svd():
         with placeholder.form(key=f"svd_recommendation_{cat}"):
             padded_products = pad_selected_products(products)
             if (
-                st.session_state.user_has_sephora
-                and not st.session_state.sephora_not_in_list
+                st.session_state.form_data.sephora_info.user_has_sephora
+                and not st.session_state.form_data.sephora_info.sephora_not_in_list
             ):
                 recommendations = content_recommender(
                     cat,
@@ -298,31 +272,35 @@ def svd():
                 )
 
             recommendations = recommendations.head(5)
-            fields_to_csv[f"recs_{cat}"] = recommendations[["product_name"]].to_json()
             print("recommendations", recommendations)
             st.write(f"Here are your {cat} recommendations:")
             display_recommendations(recommendations)
-            follow_up_questions(recommendations, cat, fields_to_csv)
+            st.session_state.form_data.recommendations["SVD"][cat] = recommendations[
+                "product_name"
+            ].tolist()
+            follow_up_questions("SVD", recommendations, cat)
             if st.form_submit_button():
-                st.session_state.svd_cat_index`AZSD` += 1
+                st.session_state.svd_cat_index += 1
                 placeholder.empty()
             else:
                 st.stop()
 
-    with st.form("nps_ml"):
-        reccommend = st.slider(
+    with st.form("nps_svd"):
+        score = st.slider(
             "How likely would you recommend this recommender to someone else? (1 = not at all likely, 10 = extremely likely)",
             min_value=0,
             max_value=10,
             value=1,
             key="reccommend",
         )
-        nps_reason = st.text_input(
-            "Please explain why you gave that score.", key="nps_reason"
+        comment = st.text_input(
+            "Please explain why you gave that score.", key="nps_svd_reason"
         )
         if st.form_submit_button():
+            st.session_state.form_data.nps_scores["SVD"] = NPSScore(score, comment)
             st.success("Thanks for your feedback!")
             st.session_state.svd_complete = True
+            st.experimental_rerun()
 
 
 if "ml_stage_counter" not in st.session_state:
@@ -331,11 +309,6 @@ if "ml_stage_counter" not in st.session_state:
 if "ml_stage_input" not in st.session_state:
     st.session_state.ml_stage_input = None
 
-@dataclass
-class SkinInfo:
-    skin_tone: str
-    skin_type: str
-    skin_concern: str
 
 def skin_info(_):
     skin_tone = st.selectbox(
@@ -353,13 +326,15 @@ def skin_info(_):
         options=SKINCARE_CONCERNS,
         key="skin_concern",
     )
-    return SkinInfo(skin_tone, skin_type, skin_concern)
+    st.session_state.form_data.ml_input.skin_info = SkinInfo(
+        skin_tone, skin_type, skin_concern
+    )
 
 
 ML_stages = [(category_selection, validate_category_selection), (skin_info, None)]
 
 
-def ml(df, product_categories, fields):
+def ml():
     while st.session_state.ml_stage_counter < len(ML_stages):
         placeholder = st.empty()
         stage, validator = ML_stages[st.session_state.ml_stage_counter]
@@ -374,134 +349,58 @@ def ml(df, product_categories, fields):
                 st.stop()
     if "ml_cat_index" not in st.session_state:
         st.session_state.ml_cat_index = 0
-    while st.session_state.ml_cat_index < len(st.session_state.top3.items()):
-        cat, products = list(st.session_state.top3.items())[
+    while st.session_state.ml_cat_index < len(
+        st.session_state.form_data.ml_input.categories
+    ):
+        category = st.session_state.form_data.ml_input.categories[
             st.session_state.ml_cat_index
         ]
         placeholder = st.empty()
-        with placeholder.form(key=f"svd_recommendation_{cat}"):
-            padded_products = pad_selected_products(products)
-            if (
-                st.session_state.user_has_sephora
-                and not st.session_state.sephora_not_in_list
-            ):
-                recommendations = content_recommender(
-                    cat,
-                    *(padded_products),
-                    df,
-                )
-                multiple_rating_users_cbf = get_users_with_multiple_reviews(
-                    recommendations
-                )
-                if (
-                    st.session_state.username in multiple_rating_users_cbf
-                    and st.session_state.username != ""
-                ):
-                    recommendations = collab_recommender(
-                        recommendations, 5, st.session_state.username
-                    )
+        with placeholder.form(key=f"ml_recommendation_{category}"):
+            ml_df = build_ml_predictor_input(df)
+            ml_df["pred_rating"] = predictor.predict(
+                ml_df.drop(["product_name", "url"], axis=1)
+            )
+            ml_df = ml_df.sort_values(by="pred_rating", ascending=False)
+            ml_df = ml_df[ml_df["category"] == category]
 
-            else:
-                recommendations = content_recommender(
-                    cat,
-                    *(padded_products),
-                    df,
-                )
-
-            recommendations = recommendations.head(5)
-            fields_to_csv[f"recs_{cat}"] = recommendations[["product_name"]].to_json()
-            print("recommendations", recommendations)
-            st.write(f"Here are your {cat} recommendations:")
+            recommendations: pd.DataFrame = ml_df.head(5)
+            st.write(f"Here are your {category} recommendations:")
             display_recommendations(recommendations)
-            follow_up_questions(recommendations, cat, fields_to_csv)
+            st.session_state.form_data.recommendations["ML"][
+                category
+            ] = recommendations["product_name"].tolist()
+            follow_up_questions("ML", recommendations, category)
             if st.form_submit_button():
-                st.session_state.cat_index += 1
+                st.session_state.ml_cat_index += 1
                 placeholder.empty()
             else:
                 st.stop()
 
-
-            # for cat in cat_ml:
-            #     ml_df = pd.DataFrame()
-            #     ml_df["ingredients"] = df["ingredients"]
-            #     ml_df["category"] = df["category"]
-            #     ml_df["skin_tone"] = skin_tone
-            #     ml_df["skin_type"] = skin_type
-            #     ml_df["skin_concern"] = skin_concern
-            #     ml_df["product_name"] = df["product_name"]
-            #     ml_df["url"] = df["url"]
-            #     ml_df["pred_rating"] = ml_pred.predict(
-            #         ml_df.drop(["product_name", "url"], axis=1)
-            #     )
-            #     ml_df = ml_df.sort_values(by="pred_rating", ascending=False)
-            #     ml_df = ml_df[ml_df["category"] == cat].head(5)
-            #     fields[f"recs_ml_{cat}"] = ml_df[
-            #         ["product_name", "pred_rating"]
-            #     ].to_json()
-            #     print("ml_df", ml_df["product_name"])
-            #     display_recommendations(ml_df)
-            #     have_tried_ml = st.radio(
-            #         "Have you tried any of these products?",
-            #         options=["Yes", "No"],
-            #         key=f"{cat}_tried_ml",
-            #     )
-            #     fields[f"{cat}_tried_ml"] = have_tried_ml
-            #     print("have_tried_ml", have_tried_ml)
-            #     if have_tried_ml == "Yes":
-            #         st.write("Which of these have you tried?")
-            #         tried_products_ml_bool = [
-            #             st.checkbox(product_name, key=f"{cat}_tried_products_ml")
-            #             for product_name in ml_df["product_name"].values
-            #         ]
-            #         tried_products_ml = ml_df["product_name"][tried_products_ml_bool]
-            #         print("tried_products_ml", tried_products_ml)
-            #         fields[f"{cat}_tried_products_ml"] = tried_products_ml
-            #     else:
-            #         tried_products_ml = []
-            #     willing_ml = st.radio(
-            #         "Would you be willing to try any of these products?",
-            #         key=f"{cat}_willing_ml",
-            #         options=["Yes", "No"],
-            #     )
-            #     fields[f"{cat}_willing_ml"] = willing_ml
-            #     print("willing_ml", willing_ml)
-            #     if willing_ml == "Yes":
-            #         willing_products_temp_ml = ml_df["product_name"][
-            #             ~ml_df["product_name"].isin(tried_products_ml)
-            #         ]
-            #         willing_products_ml_bool = [
-            #             st.checkbox(item, key=f"{item}_willing_ml")
-            #             for item in willing_products_temp_ml
-            #         ]
-            #         willing_products_ml = willing_products_temp_ml[
-            #             willing_products_ml_bool
-            #         ]
-            #         print("willing_products_ml", willing_products_ml)
-            #         fields[f"{cat}_willing_products_ml"] = willing_products_ml
-
-            with st.form("nps_ml"):
-                reccommend_ml = st.slider(
-                    "How likely would you recommend this recommender to someone else? (1 = not at all likely, 10 = extremely likely)",
-                    min_value=0,
-                    max_value=10,
-                    value=1,
-                    key="ml_reccommend",
-                )
-                fields["ml_reccommend"] = reccommend_ml
-                nps_reason_ml = st.text_input(
-                    "Please explain why you gave that score.", key="ml_nps_reason"
-                )
-                fields["ml_nps_reason"] = nps_reason_ml
-                if st.form_submit_button():
-                    st.success("Thanks for your feedback!")
+    with st.form("nps_ml"):
+        score = st.slider(
+            "How likely would you recommend this recommender to someone else? (1 = not at all likely, 10 = extremely likely)",
+            min_value=0,
+            max_value=10,
+            value=1,
+            key="ml_reccommend",
+        )
+        comment = st.text_input(
+            "Please explain why you gave that score.", key="ml_nps_reason"
+        )
+        if st.form_submit_button():
+            st.session_state.form_data.nps_scores["ML"] = NPSScore(score, comment)
+            st.session_state.ml_complete = True
+            st.success("Thanks for your feedback!")
+            st.experimental_rerun()
 
 
-def send_email(fields):
+def send_email():
     configuration = sib_api_v3_sdk.Configuration()
     configuration.api_key[
         "api-key"
-    ] = "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"
-    attachment = fields
+    ] = "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"
+    attachment = st.session_state["form_data"].to_json()
     # create an instance of the API class
     api_instance = sib_api_v3_sdk.TransactionalEmailsApi(
         sib_api_v3_sdk.ApiClient(configuration)
@@ -541,86 +440,51 @@ if "email" not in st.session_state:
 if "svd_complete" not in st.session_state:
     st.session_state["svd_complete"] = False
 
+if "ml_complete" not in st.session_state:
+    st.session_state["ml_complete"] = False
+
 st.title("FYP Questionnaire")
 st.caption(
     "Please answer the following questions. There are three parts, one for Recommender A, and one for Recommender B, and one to compare the two."
 )
 if st.session_state.k < 0.5:
-    if not st.session_state.svd_complete:
+    if not st.session_state["svd_complete"]:
         svd()
     else:
-        st.write("Thank you for completing part 1 :)")
-        st.write("Part 2 is a different recommender.")
-        if ml(df, product_categories, fields_to_csv):
-            st.write("Thank you for completing part 2 :)")
-            st.write("Part 3 contains questions comparing part 1 and part 2.")
-            user_pref = st.radio(
-                "Which of the two did you prefer?",
-                options=["Part 1", "Part 2", "Hated both :("],
-            )
-            fields_to_csv["user_pref"] = user_pref
-            print("user_pref", user_pref)
-            if user_pref == "Part 1" or "Part 2":
-                why_user_pref = st.text_input(f"Why did you prefer {user_pref}?")
-                fields_to_csv["why_user_pref"] = why_user_pref
-                print("why_user_pref", why_user_pref)
-                user_consistent = st.radio(
-                    "Would you use either of them consistently?", options=["Yes", "No"]
-                )
-                fields_to_csv["user_consistent"] = user_consistent
-                print("user_consistent", user_consistent)
-                if user_consistent == "Yes":
-                    user_when = st.text_input("When would you use it?")
-                    fields_to_csv["user_when"] = user_when
-                    print("user_when", user_when)
-                else:
-                    user_not_use = st.text_input("Why not?")
-                    fields_to_csv["user_not_use"] = user_not_use
-                    print("user_not_use", user_not_use)
-            else:
-                why_user_pref = st.text_input("Why did you hate both of them?")
-                fields_to_csv["why_user_pref"] = why_user_pref
-                print("why_user_pref", why_user_pref)
-            if st.button("Submit"):
-                if st.session_state.email == "":
-                    send_email(fields_to_csv)
-                    st.write("Thank you for completing this questionnaire :)")
+        if not st.session_state["ml_complete"]:
+            st.write("Thank you for completing part 1 :)")
+            st.write("Part 2 is a different recommender.")
+            ml()
 
 else:
-    if ml(df, product_categories, fields_to_csv):
-        st.write("Thank you for completing part 1 :)")
-        st.write("Part 2 is a different recommender.")
-        if svd():
-            st.write("Thank you for completing part 2 :)")
-            st.write("Part 3 contains questions comparing part 1 and part 2.")
-            user_pref = st.radio(
-                "Which of the two did you prefer?",
-                options=["Part 1", "Part 2", "Hated both :("],
+    if not st.session_state["ml_complete"]:
+        ml()
+    else:
+        if not st.session_state["svd_complete"]:
+            st.write("Thank you for completing part 1 :)")
+            st.write("Part 2 is a different recommender.")
+            svd()
+
+if st.session_state["ml_complete"] and st.session_state["svd_complete"]:
+    with st.form("part3"):
+        st.write("Thank you for completing part 2 :)")
+        st.write("Part 3 contains questions comparing part 1 and part 2.")
+        user_pref = st.radio(
+            "Which of the two did you prefer?",
+            options=["Part 1", "Part 2", "Hated both :("],
+        )
+        if user_pref == "Part 1" or "Part 2":
+            why_user_pref = st.text_input(f"Why did you prefer {user_pref}?")
+            user_consistent = st.radio(
+                "Would you use either of them consistently?", options=["Yes", "No"]
             )
-            fields_to_csv["user_pref"] = user_pref
-            print("user_pref", user_pref)
-            if user_pref == "Part 1" or "Part 2":
-                why_user_pref = st.text_input(f"Why did you prefer {user_pref}?")
-                fields_to_csv["why_user_pref"] = why_user_pref
-                print("why_user_pref", why_user_pref)
-                user_consistent = st.radio(
-                    "Would you use either of them consistently?", options=["Yes", "No"]
-                )
-                fields_to_csv["user_consistent"] = user_consistent
-                print("user_consistent", user_consistent)
-                if user_consistent == "Yes":
-                    user_when = st.text_input("When would you use it?")
-                    fields_to_csv["user_when"] = user_when
-                    print("user_when", user_when)
-                else:
-                    user_not_use = st.text_input("Why not?")
-                    fields_to_csv["user_not_use"] = user_not_use
-                    print("user_not_use", user_not_use)
+            if user_consistent == "Yes":
+                user_when = st.text_input("When would you use it?")
             else:
-                why_user_pref = st.text_input("Why did you hate both of them?")
-                fields_to_csv["why_user_pref"] = why_user_pref
-                print("why_user_pref", why_user_pref)
-            if st.button("Submit"):
-                if st.session_state.email == "":
-                    send_email(fields_to_csv)
-                    st.write("Thank you for completing this questionnaire :)")
+                user_not_use = st.text_input("Why not?")
+        else:
+            why_user_pref = st.text_input("Why did you hate both of them?")
+        if st.form_submit_button("Submit"):
+            send_email()
+            st.write("Thank you for completing this questionnaire :)")
+
