@@ -397,7 +397,7 @@ def send_email():
     configuration = sib_api_v3_sdk.Configuration()
     configuration.api_key[
         "api-key"
-    ] = "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"
+    ] = "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"
     attachment = st.session_state["form_data"].to_json()
     # create an instance of the API class
     api_instance = sib_api_v3_sdk.TransactionalEmailsApi(
@@ -430,7 +430,7 @@ def send_email():
 
 
 if "k" not in st.session_state:
-    st.session_state["k"] = 0
+    st.session_state["k"] = 0 #random.random()
 
 if "email" not in st.session_state:
     st.session_state["email"] = ""
@@ -449,19 +449,17 @@ if st.session_state.k < 0.5:
     if not st.session_state["svd_complete"]:
         svd()
     else:
-        if not st.session_state["ml_complete"]:
-            st.write("Thank you for completing part 1 :)")
-            st.write("Part 2 is a different recommender.")
-            ml()
+        st.write("Thank you for completing part 1 :)")
+        st.write("Part 2 is a different recommender.")
+        ml()
 
 else:
     if not st.session_state["ml_complete"]:
         ml()
     else:
-        if not st.session_state["svd_complete"]:
-            st.write("Thank you for completing part 1 :)")
-            st.write("Part 2 is a different recommender.")
-            svd()
+        st.write("Thank you for completing part 1 :)")
+        st.write("Part 2 is a different recommender.")
+        svd()
 
 if st.session_state["ml_complete"] and st.session_state["svd_complete"]:
     with st.form("part3"):
@@ -483,6 +481,7 @@ if st.session_state["ml_complete"] and st.session_state["svd_complete"]:
         else:
             why_user_pref = st.text_input("Why did you hate both of them?")
         if st.form_submit_button("Submit"):
+            print(st.session_state.form_data.to_json())
             send_email()
             st.write("Thank you for completing this questionnaire :)")
 
