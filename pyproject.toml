@@ -23,6 +23,7 @@ memory-profiler = "^0.60.0"
 psrecord = "^1.2"
 dataclasses-json = "^0.5.7"
 watchdog = "^2.1.8"
+pyarrow = "^8.0.0"
 
 
 [tool.poetry.dev-dependencies]

@@ -471,5 +471,3 @@ if st.session_state["ml_complete"] and st.session_state["svd_complete"]:
                 f.write(st.session_state.form_data.to_json())
             print(st.session_state.form_data.to_json())
             st.success("Thank you for completing this questionnaire :)")
-        else:
-            st.stop()
