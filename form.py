@@ -286,22 +286,25 @@ def svd():
             else:
                 st.stop()
 
-    with st.form("nps_svd"):
-        score = st.slider(
-            "How likely would you recommend this recommender to someone else? (1 = not at all likely, 10 = extremely likely)",
-            min_value=0,
-            max_value=10,
-            value=1,
-            key="reccommend",
-        )
-        comment = st.text_input(
-            "Please explain why you gave that score.", key="nps_svd_reason"
-        )
-        if st.form_submit_button():
-            st.session_state.form_data.nps_scores["SVD"] = NPSScore(score, comment)
-            st.session_state.svd_complete = True
-            st.success("Thanks for your feedback!")
-            return True
+    if not st.session_state.svd_complete:
+        with st.form("nps_svd"):
+            score = st.slider(
+                "How likely would you recommend this recommender to someone else? (1 = not at all likely, 10 = extremely likely)",
+                min_value=0,
+                max_value=10,
+                value=1,
+                key="reccommend",
+            )
+            comment = st.text_input(
+                "Please explain why you gave that score.", key="nps_svd_reason"
+            )
+            if st.form_submit_button():
+                st.session_state.form_data.nps_scores["SVD"] = NPSScore(score, comment)
+                st.session_state.svd_complete = True
+                st.success("Thanks for your feedback!")
+                return True
+    else:
+        return True
 
 
 if "ml_stage_counter" not in st.session_state:
@@ -393,6 +396,9 @@ def ml():
                 st.session_state.form_data.nps_scores["ML"] = NPSScore(score, comment)
                 st.session_state.ml_complete = True
                 st.success("Thanks for your feedback!")
+                return True
+    else:
+        return True
 
 
 if "k" not in st.session_state:
