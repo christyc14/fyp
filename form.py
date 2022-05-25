@@ -1,5 +1,6 @@
 from __future__ import print_function
 from dataclasses import dataclass
+import json
 from dataclasses_json import dataclass_json
 
 import streamlit as st
@@ -284,22 +285,23 @@ def svd():
                 placeholder.empty()
             else:
                 st.stop()
-    if not st.session_state.svd_complete:
-        with st.form("nps_svd"):
-            score = st.slider(
-                "How likely would you recommend this recommender to someone else? (1 = not at all likely, 10 = extremely likely)",
-                min_value=0,
-                max_value=10,
-                value=1,
-                key="reccommend",
-            )
-            comment = st.text_input(
-                "Please explain why you gave that score.", key="nps_svd_reason"
-            )
-            if st.form_submit_button():
-                st.session_state.form_data.nps_scores["SVD"] = NPSScore(score, comment)
-                st.success("Thanks for your feedback!")
-                st.session_state.svd_complete = True
+
+    with st.form("nps_svd"):
+        score = st.slider(
+            "How likely would you recommend this recommender to someone else? (1 = not at all likely, 10 = extremely likely)",
+            min_value=0,
+            max_value=10,
+            value=1,
+            key="reccommend",
+        )
+        comment = st.text_input(
+            "Please explain why you gave that score.", key="nps_svd_reason"
+        )
+        if st.form_submit_button():
+            st.session_state.form_data.nps_scores["SVD"] = NPSScore(score, comment)
+            st.session_state.svd_complete = True
+            st.success("Thanks for your feedback!")
+            return True
 
 
 if "ml_stage_counter" not in st.session_state:
@@ -393,42 +395,6 @@ def ml():
                 st.success("Thanks for your feedback!")
 
 
-def send_email():
-    configuration = sib_api_v3_sdk.Configuration()
-    configuration.api_key[
-        "api-key"
-    ] = "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"
-    attachment = st.session_state["form_data"].to_json()
-    # create an instance of the API class
-    api_instance = sib_api_v3_sdk.TransactionalEmailsApi(
-        sib_api_v3_sdk.ApiClient(configuration)
-    )
-    subject = "My Subject"
-    html_content = f"<html><body><h1>This is the data </h1>{attachment}</body></html>"
-    sender = {"name": "Christy Chan", "email": "christychanseewai@gmail.com"}
-    to = [{"email": "christychanseewai@gmail.com", "name": "Jane Doe"}]
-    reply_to = {"email": "replyto@domain.com", "name": "John Doe"}
-    headers = {"Some-Custom-Name": "unique-id-1234"}
-    params = {"parameter": "My param value", "subject": "New Subject"}
-    send_smtp_email = sib_api_v3_sdk.SendSmtpEmail(
-        to=to,
-        reply_to=reply_to,
-        headers=headers,
-        html_content=html_content,
-        sender=sender,
-        subject=subject,
-    )
-
-    try:
-        # Send a transactional email
-        api_response = api_instance.send_transac_email(send_smtp_email)
-        pprint(api_response)
-        st.write("Responses have been saved!")
-        st.session_state["email"] = "sent"
-    except ApiException as e:
-        print("Exception when calling SMTPApi->send_transac_email: %s\n" % e)
-
-
 if "k" not in st.session_state:
     st.session_state["k"] = 0 #random.random()
 
@@ -446,17 +412,13 @@ st.caption(
     "Please answer the following questions. There are three parts, one for Recommender A, and one for Recommender B, and one to compare the two."
 )
 if st.session_state.k < 0.5:
-    if not st.session_state["svd_complete"]:
-        svd()
-    else:
+    if svd() is not None:
         st.write("Thank you for completing part 1 :)")
         st.write("Part 2 is a different recommender.")
         ml()
 
 else:
-    if not st.session_state["ml_complete"]:
-        ml()
-    else:
+    if ml() is not None:
         st.write("Thank you for completing part 1 :)")
         st.write("Part 2 is a different recommender.")
         svd()
@@ -481,7 +443,8 @@ if st.session_state["ml_complete"] and st.session_state["svd_complete"]:
         else:
             why_user_pref = st.text_input("Why did you hate both of them?")
         if st.form_submit_button("Submit"):
+            with open("data.jsonlines", "a") as f:
+                f.write(st.session_state.form_data.to_json())
             print(st.session_state.form_data.to_json())
-            send_email()
             st.write("Thank you for completing this questionnaire :)")
 
