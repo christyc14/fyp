@@ -14,6 +14,7 @@ from loaders import load_data, load_model
 from svd import content_recommender
 from svd import collab_recommender
 from autogluon.tabular import TabularPredictor
+import random
 
 from utils import (
     build_ml_predictor_input,
@@ -156,7 +157,7 @@ def validate_category_selection(selected_categories):
 
 def top3_product_selection(selected_categories):
     top_3: Dict[str, List[str]] = {}
-    st.write("Which are your top 3 products for each category?")
+    st.write("What are your top 3 products for each category?")
     for category in selected_categories:
         top_3[category] = st.multiselect(
             category,
@@ -172,6 +173,18 @@ def validate_top3_product_selection(top_3) -> bool:
         return False
     elif any([len(v) == 0 for v in top_3.values()]):
         st.error("Please select at least 1 product for each category")
+        return False
+    return True
+
+
+def require_preference_reason(why_user_pref, why_user_pref_other) -> bool:
+    print("holo")
+    print(why_user_pref, why_user_pref_other)
+    if why_user_pref == ["Other"] and why_user_pref_other == "":
+        st.error("Please enter a reason")
+        return False
+    if why_user_pref == []:
+        st.error("Please select a reason")
         return False
     return True
 
@@ -289,7 +302,7 @@ def svd():
     if not st.session_state.svd_complete:
         with st.form("nps_svd"):
             score = st.slider(
-                "How likely would you recommend this recommender to someone else? (1 = not at all likely, 10 = extremely likely)",
+                "How likely is it would you recommend this recommender to someone else? (1 = not at all likely, 10 = extremely likely)",
                 min_value=0,
                 max_value=10,
                 value=1,
@@ -383,7 +396,7 @@ def ml():
     if not st.session_state.ml_complete:
         with st.form("nps_ml"):
             score = st.slider(
-                "How likely would you recommend this recommender to someone else? (1 = not at all likely, 10 = extremely likely)",
+                "How likely is it would you recommend this recommender to someone else? (1 = not at all likely, 10 = extremely likely)",
                 min_value=0,
                 max_value=10,
                 value=1,
@@ -402,7 +415,7 @@ def ml():
 
 
 if "k" not in st.session_state:
-    st.session_state["k"] = 0 #random.random()
+    st.session_state["k"] = random.random()
 
 if "email" not in st.session_state:
     st.session_state["email"] = ""
@@ -435,22 +448,28 @@ if st.session_state["ml_complete"] and st.session_state["svd_complete"]:
         st.write("Part 3 contains questions comparing part 1 and part 2.")
         user_pref = st.radio(
             "Which of the two did you prefer?",
-            options=["Part 1", "Part 2", "Hated both :("],
+            options=["Top 3 Products Recommender", "Skin Type Recommender"],
         )
-        if user_pref == "Part 1" or "Part 2":
-            why_user_pref = st.text_input(f"Why did you prefer {user_pref}?")
-            user_consistent = st.radio(
-                "Would you use either of them consistently?", options=["Yes", "No"]
-            )
-            if user_consistent == "Yes":
-                user_when = st.text_input("When would you use it?")
-            else:
-                user_not_use = st.text_input("Why not?")
+        why_user_pref = st.multiselect(
+            "Why did you prefer that recommender?",
+            options=["", "Personalization", "Ease of use", "Other"],
+        )
+        why_user_pref_other = st.text_input(
+            "If you selected other, please explain why."
+        )
+        user_consistent = st.radio(
+            "Would you use either of them consistently?", options=["Yes", "No"]
+        )
+        if user_consistent == "Yes":
+            user_when = st.text_input("When would you use it?")
         else:
-            why_user_pref = st.text_input("Why did you hate both of them?")
-        if st.form_submit_button("Submit"):
+            user_not_use = st.text_input("Why not?")
+        if st.form_submit_button("Submit") and require_preference_reason(
+            why_user_pref, why_user_pref_other
+        ):
             with open("data.jsonlines", "a") as f:
                 f.write(st.session_state.form_data.to_json())
             print(st.session_state.form_data.to_json())
-            st.write("Thank you for completing this questionnaire :)")
-
+            st.success("Thank you for completing this questionnaire :)")
+        else:
+            st.stop()
