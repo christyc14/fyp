@@ -95,6 +95,15 @@ class NPSScore:
     comment: str
 
 
+@dataclass
+class ComparisonAnswers:
+    user_pref: List[str]
+    why_user_pref: str
+    why_user_pref_other: str
+    user_consistent: str
+    user_when: str
+
+
 @dataclass_json
 @dataclass
 class FormData:
@@ -104,6 +113,7 @@ class FormData:
     ml_input: ML_input
     follow_up_questions: Dict[Stage, Dict[Category, FollowUpQuestionData]]
     nps_scores: Dict[Stage, NPSScore]
+    comparison_answers: ComparisonAnswers
 
 
 df: pd.DataFrame = load_data()
@@ -118,6 +128,7 @@ if "form_data" not in st.session_state:
         ML_input([], SkinInfo(None, None, None)),
         {"ML": {}, "SVD": {}},
         {},
+        ComparisonAnswers(None, None, None, None, None),
     )
 
 
@@ -177,13 +188,14 @@ def validate_top3_product_selection(top_3) -> bool:
     return True
 
 
-def require_preference_reason(why_user_pref, why_user_pref_other) -> bool:
-    print("holo")
-    print(why_user_pref, why_user_pref_other)
-    if why_user_pref == ["Other"] and why_user_pref_other == "":
+def require_preference_reason() -> bool:
+    if (
+        st.session_state.form_data.comparison_answers.why_user_pref == ["Other"]
+        and st.session_state.form_data.comparison_answers.why_user_pref_other == ""
+    ):
         st.error("Please enter a reason")
         return False
-    if why_user_pref == []:
+    if st.session_state.form_data.comparison_answers.why_user_pref == []:
         st.error("Please select a reason")
         return False
     return True
@@ -279,6 +291,9 @@ def svd():
                     )
 
             else:
+                print("cat = ", cat)
+                print("products = ", padded_products)
+                print("df = ", df)
                 recommendations = content_recommender(
                     cat,
                     *(padded_products),
@@ -446,27 +461,24 @@ if st.session_state["ml_complete"] and st.session_state["svd_complete"]:
     with st.form("part3"):
         st.write("Thank you for completing part 2 :)")
         st.write("Part 3 contains questions comparing part 1 and part 2.")
-        user_pref = st.radio(
+        st.session_state.form_data.comparison_answers.user_pref = st.radio(
             "Which of the two did you prefer?",
             options=["Top 3 Products Recommender", "Skin Type Recommender"],
         )
-        why_user_pref = st.multiselect(
+        st.session_state.form_data.comparison_answers.why_user_pref = st.multiselect(
             "Why did you prefer that recommender?",
             options=["", "Personalization", "Ease of use", "Other"],
         )
-        why_user_pref_other = st.text_input(
-            "If you selected other, please explain why."
+        st.session_state.form_data.comparison_answers.why_user_pref_other = (
+            st.text_input("If you selected other, please explain why.")
         )
-        user_consistent = st.radio(
+        st.session_state.form_data.comparison_answers.user_consistent = st.radio(
             "Would you use either of them consistently?", options=["Yes", "No"]
         )
-        if user_consistent == "Yes":
-            user_when = st.text_input("When would you use it?")
-        else:
-            user_not_use = st.text_input("Why not?")
-        if st.form_submit_button("Submit") and require_preference_reason(
-            why_user_pref, why_user_pref_other
-        ):
+        st.session_state.form_data.comparison_answers.user_when = st.text_input(
+            "When would/wouldn't you use it?"
+        )
+        if st.form_submit_button("Submit") and require_preference_reason():
             with open("data.jsonlines", "a") as f:
                 f.write(st.session_state.form_data.to_json())
             print(st.session_state.form_data.to_json())

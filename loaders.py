@@ -1,6 +1,5 @@
 from __future__ import print_function
 from pathlib import Path
-from tempfile import NamedTemporaryFile
 import streamlit as st
 import pandas as pd
 import pyarrow as pa
