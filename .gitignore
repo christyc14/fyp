@@ -139,6 +139,6 @@ sephora_scraped_data.csv
 .streamlit/secrets.toml
 data.pkl
 
-agModel-predictClass/*
+agModels-predictClass/*
 data.arrow
 data.jsonlines
