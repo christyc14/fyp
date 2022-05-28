@@ -481,5 +481,6 @@ if st.session_state["ml_complete"] and st.session_state["svd_complete"]:
         if st.form_submit_button("Submit") and require_preference_reason():
             with open("data.jsonlines", "a") as f:
                 f.write(st.session_state.form_data.to_json())
+                f.write("\n")
             print(st.session_state.form_data.to_json())
             st.success("Thank you for completing this questionnaire :)")
