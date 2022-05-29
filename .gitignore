@@ -140,5 +140,6 @@ sephora_scraped_data.csv
 data.pkl
 
 agModels-predictClass/*
+agModels-predictClass.zip
 data.arrow
 data.jsonlines
